@@ -1,0 +1,12 @@
+[plugin]
+enabled = false
+config_version = "1.0.0"
+
+[ws_server]
+host = "0.0.0.0"
+port = 9721
+
+[chat]
+enable_chat_list_filter = false
+group_list = []
+private_list = []

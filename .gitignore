@@ -1,0 +1,57 @@
+# ────────────────────────────
+# 隐私 & 敏感文件
+# ────────────────────────────
+
+# 插件运行时生成/备份的配置（可能含 token）
+config.toml
+config_back/
+*.backup.*
+*.backup
+
+# 日志文件
+*.log
+logs/
+
+# ────────────────────────────
+# Python
+# ────────────────────────────
+
+__pycache__/
+*.pyc
+*.pyo
+
+.venv/
+venv/
+env/
+
+dist/
+build/
+*.egg-info/
+*.egg
+
+.pytest_cache/
+.coverage
+
+# ────────────────────────────
+# 系统 & IDE
+# ────────────────────────────
+
+Thumbs.db
+Desktop.ini
+
+.vscode/
+.idea/
+*.iml
+
+*~
+*.swp
+*.sw o
+*.un~
+*.bak
+
+# ────────────────────────────
+# Git
+# ────────────────────────────
+
+!.gitignore
+*.orig
