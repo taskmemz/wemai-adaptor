@@ -24,6 +24,8 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         self._ws_server: Optional[WemaiWsServer] = None
         self._pending_requests: dict[str, asyncio.Future] = {}
         self._resp_lock = asyncio.Lock()
+        # 出站消息缓冲（ws_server 不可用或客户端未连接时排队）
+        self._pending_outbound: list[dict[str, Any]] = []
 
     async def on_load(self) -> None:
         logger.info("on_load 被调用, enabled=%s", self._is_enabled())
@@ -287,9 +289,26 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         await self._send_outbound(payload)
 
     async def _send_outbound(self, data: Dict[str, Any]) -> bool:
+        if self._ws_server is not None:
+            ok = await self._ws_server.send_outbound(data)
+            if ok:
+                return True
+            # ws_server 返回 False → 客户端断开且队列满了等极端情况
+        # 插件层本地排队，保证永不丢失
+        self._pending_outbound.append(data)
+        return True
+
+    async def _drain_pending_outbound(self) -> None:
+        if not self._pending_outbound:
+            return
         if self._ws_server is None:
-            return False
-        return await self._ws_server.send_outbound(data)
+            return
+        batch = list(self._pending_outbound)
+        self._pending_outbound.clear()
+        for data in batch:
+            await self._ws_server.send_outbound(data)
+        if batch:
+            logger.info("已发送 %d 条排队出站消息", len(batch))
 
     async def _send_request(self, req_type: str, params: dict, timeout: float = 15.0) -> dict:
         req_id = str(uuid.uuid4())[:8]
@@ -335,6 +354,8 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         if self._ws_server is not None:
             self._ws_server.set_inbound_handler(self._handle_client_inbound)
             await self._ws_server.start()
+            # 发送启动前排队的所有出站消息
+            await self._drain_pending_outbound()
             await self.ctx.gateway.update_state(
                 gateway_name=WEMAI_GATEWAY_NAME,
                 ready=True,

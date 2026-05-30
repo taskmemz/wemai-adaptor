@@ -58,6 +58,7 @@ class WemaiWsServer:
         self._server: Optional[asyncio.Server] = None
         self._client: Optional[WsClient] = None
         self._on_inbound: Optional[Callable[[dict[str, Any]], None]] = None
+        self._pending_outbound: list[dict[str, Any]] = []
 
     def set_inbound_handler(self, handler: Callable[[dict[str, Any]], None]) -> None:
         self._on_inbound = handler
@@ -72,6 +73,7 @@ class WemaiWsServer:
         logger.info("WebSocket 服务器已启动: %s:%s", addr[0], addr[1])
 
     async def stop(self) -> None:
+        self._pending_outbound.clear()
         if self._client is not None:
             self._client.close()
             self._client = None
@@ -86,10 +88,20 @@ class WemaiWsServer:
 
     async def send_outbound(self, data: dict[str, Any]) -> bool:
         if self._client is None or not self._client.connected:
-            logger.warning("客户端未连接，丢弃出站消息")
-            return False
+            logger.info("客户端未连接，消息已排队等待发送")
+            self._pending_outbound.append(data)
+            return True
         await self._client.send_json(data)
         return True
+
+    async def _drain_pending(self) -> None:
+        if not self._pending_outbound:
+            return
+        batch = list(self._pending_outbound)
+        self._pending_outbound.clear()
+        for data in batch:
+            await self._client.send_json(data)
+        logger.info("已发送 %d 条排队消息", len(batch))
 
     async def _on_connect(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         client = WsClient(reader, writer)
@@ -99,6 +111,7 @@ class WemaiWsServer:
             return
         self._client = client
         logger.info("客户端已连接: %s", client.addr)
+        await self._drain_pending()
         try:
             while client.connected:
                 msg = await client.recv_json()
