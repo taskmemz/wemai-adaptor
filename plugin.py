@@ -1,8 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import hashlib
 import logging
+import os
+import re
 import time
 import uuid
 from typing import Any, ClassVar, Dict, Optional, cast
@@ -150,7 +153,13 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                     at_members.append(sdata)
                     result.append({"type": "text", "data": f"@{sdata} "})
                 elif isinstance(sdata, dict):
-                    name = sdata.get("user_nickname") or sdata.get("name") or ""
+                    name = (
+                        sdata.get("user_nickname")
+                        or sdata.get("name")
+                        or sdata.get("target_user_nickname")
+                        or sdata.get("target_user_id")
+                        or ""
+                    )
                     if name:
                         at_members.append(name)
                         result.append({"type": "text", "data": f"@{name} "})
@@ -158,6 +167,16 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 sub_segs, sub_ats = WemaiAdapterPlugin._build_segments_from_raw(list(sdata))
                 result.extend(sub_segs)
                 at_members.extend(sub_ats)
+        # 从文本段中提取 @某人，追加到 at_members（MaiBot 可能生成 text 而非 at 类型）
+        for seg in result:
+            if seg.get("type") != "text":
+                continue
+            text = seg.get("data", "")
+            for token in re.split(r'[\s(（]+', text):
+                if token.startswith("@") and len(token) > 1:
+                    name = token[1:].rstrip(")）")
+                    if name and name not in at_members:
+                        at_members.append(name)
         return result, at_members
 
     def _extract_text(self, seg: Any, collector: Optional[list[str]] = None) -> list[str]:
@@ -215,6 +234,8 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         is_group = data.get("is_group", False)
         sub_type = data.get("msg_type", "text")  # text | emoji | image | video
         media_path = data.get("media_path", "")   # 媒体文件路径
+        media_base64 = data.get("media_base64", "")  # base64 编码的媒体文件内容
+        media_ext = data.get("media_ext", ".png")  # 文件扩展名
 
         if not sender or not content:
             return
@@ -227,6 +248,20 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 return
             if not is_group and settings.chat.private_list and chat not in settings.chat.private_list:
                 return
+
+        # 如果客户端传了 base64 图片数据，解码保存到临时文件
+        if media_base64 and not media_path:
+            try:
+                import tempfile
+                raw = base64.b64decode(media_base64)
+                ext = media_ext if media_ext.startswith(".") else f".{media_ext}"
+                tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
+                tmp.write(raw)
+                tmp.close()
+                media_path = tmp.name
+                logger.info("已保存媒体文件: %s (%d bytes)", media_path, len(raw))
+            except Exception as e:
+                logger.warning("保存媒体文件失败: %s", e)
 
         msg_id = hashlib.md5(
             f"{chat}|{sender}|{content}|{time.time()}".encode()
