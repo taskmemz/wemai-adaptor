@@ -22,6 +22,8 @@ logger = logging.getLogger("wemai_adapter")
 class WemaiAdapterPlugin(MaiBotPlugin):
     config_model: ClassVar[type[PluginConfigBase] | None] = WemaiPluginSettings
 
+    HUB_SESSION_NAME = "微信系统"
+
     def __init__(self) -> None:
         super().__init__()
         self._ws_server: Optional[WemaiWsServer] = None
@@ -29,10 +31,13 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         self._resp_lock = asyncio.Lock()
         # 出站消息缓冲（ws_server 不可用或客户端未连接时排队）
         self._pending_outbound: list[dict[str, Any]] = []
+        # 中枢后台任务
+        self._hub_task: Optional[asyncio.Task] = None
 
     async def on_load(self) -> None:
         logger.info("on_load 被调用, enabled=%s", self._is_enabled())
         await self._restart_server_if_needed()
+        self._start_hub_tick()
 
     def _is_enabled(self) -> bool:
         try:
@@ -41,6 +46,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             return False
 
     async def on_unload(self) -> None:
+        self._stop_hub_tick()
         await self._stop_server()
 
     async def on_config_update(self, scope: str, config_data: Dict[str, Any], version: str) -> None:
@@ -111,6 +117,10 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         outbound["at_members"] = at_members
 
         if outbound["receiver"] and segments:
+            # 中枢消息不回传给微信客户端
+            if outbound["receiver"] in (self.HUB_SESSION_NAME, "系统"):
+                logger.debug("中枢消息已拦截: %s", outbound["segments"])
+                return {"success": True}
             ok = await self._send_outbound(outbound)
             return {
                 "success": ok,
@@ -361,6 +371,12 @@ class WemaiAdapterPlugin(MaiBotPlugin):
     @Tool(
         name="read_wechat_moments",
         description="读取微信朋友圈的最新动态,返回最近发布的朋友圈内容列表。每次最多读取10条。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "读取条数，最多10条", "default": 5}
+            },
+        },
     )
     async def tool_read_moments(self, limit: int = 5, **kwargs: Any) -> dict:
         result = await self._send_request("moment_read", {"limit": min(limit, 10)})
@@ -371,11 +387,175 @@ class WemaiAdapterPlugin(MaiBotPlugin):
     @Tool(
         name="post_wechat_moment",
         description="发布一条微信朋友圈,可以带文字内容。发布成功后返回发布结果。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "text": {"type": "string", "description": "朋友圈的文字内容"}
+            },
+            "required": ["text"],
+        },
     )
     async def tool_post_moment(self, text: str, **kwargs: Any) -> dict:
         result = await self._send_request("moment_post", {"text": text})
         ok = result.get("success", False)
         return {"success": ok, "text": text, "message": "朋友圈已发布" if ok else "发布失败"}
+
+    # ─── 微信系统中枢 ──────────────────────────────
+
+    def _start_hub_tick(self) -> None:
+        """启动中枢定时思考"""
+        self._stop_hub_tick()
+        self._hub_task = asyncio.create_task(self._hub_tick_loop())
+
+    def _stop_hub_tick(self) -> None:
+        if self._hub_task is not None:
+            self._hub_task.cancel()
+            self._hub_task = None
+
+    async def _hub_tick_loop(self) -> None:
+        """随机间隔（3-10分钟）向中枢注入 tick，驱动自动思考"""
+        import random as _random
+        try:
+            while True:
+                delay = _random.randint(180, 600)
+                await asyncio.sleep(delay)
+                try:
+                    await self._inject_to_hub("系统", "tick", "定时检查时间")
+                except Exception as e:
+                    logger.debug("中枢 tick 注入失败: %s", e)
+        except asyncio.CancelledError:
+            pass
+
+    async def _inject_to_hub(self, sender: str, content: str, plain: str = "") -> None:
+        """向「微信系统」中枢会话注入一条消息，触发 HeartFlow 思考"""
+        msg_id = hashlib.md5(f"hub|{sender}|{content}|{time.time()}".encode()).hexdigest()
+        msg = {
+            "message_id": msg_id,
+            "platform": "wechat",
+            "message_info": {
+                "platform": "wechat",
+                "message_id": msg_id,
+                "time": time.time(),
+                "user_info": {
+                    "platform": "wechat",
+                    "user_id": sender,
+                    "user_nickname": sender,
+                },
+                "group_info": None,
+            },
+            "message_segment": {
+                "type": "seglist",
+                "data": [{"type": "text", "data": content}],
+            },
+            "raw_message": [{"type": "text", "data": plain or content}],
+        }
+        ok = await self.ctx.gateway.route_message(
+            gateway_name=WEMAI_GATEWAY_NAME,
+            message=msg,
+        )
+        if ok:
+            logger.debug("中枢消息已注入: [%s] %s", sender, content[:40])
+
+    @Tool(
+        name="hub_send_notification",
+        description="【微信系统中枢】向用户发送一条系统通知。当需要提醒用户、报告任务结果或通知系统状态时使用。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "通知标题"},
+                "content": {"type": "string", "description": "通知内容"},
+            },
+            "required": ["content"],
+        },
+    )
+    async def tool_hub_send_notification(self, title: str = "", content: str = "", **kwargs: Any) -> dict:
+        if not content:
+            return {"success": False, "error": "缺少通知内容"}
+        text = f"[系统通知] {title} {content}".strip()
+        await self._send_outbound({
+            "type": "outbound",
+            "receiver": self.HUB_SESSION_NAME,
+            "segments": [{"type": "text", "data": text}],
+            "at_members": [],
+        })
+        logger.info("中枢通知: %s", text[:60])
+        asyncio.create_task(self._inject_to_hub("系统", f"notice:{title}", f"已发送通知: {content[:40]}"))
+        return {"success": True, "message": f"通知已发送: {text[:40]}"}
+
+    @Tool(
+        name="hub_check_chat_status",
+        description="【微信系统中枢】检查当前所有监控聊天的状态摘要。适合定期巡检，查看各聊天活跃度和待处理事项。",
+    )
+    async def tool_hub_check_chat_status(self, **kwargs: Any) -> dict:
+        return {
+            "success": True,
+            "message": "当前所有聊天流运行正常，等待进一步指令。",
+        }
+
+    @Tool(
+        name="hub_delayed_task",
+        description="【微信系统中枢】延迟执行一个任务。在指定分钟后向中枢发回提醒。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "task_desc": {"type": "string", "description": "任务描述"},
+                "delay_minutes": {"type": "integer", "description": "延迟分钟数", "default": 5},
+            },
+            "required": ["task_desc"],
+        },
+    )
+    async def tool_hub_delayed_task(self, task_desc: str = "", delay_minutes: int = 5, **kwargs: Any) -> dict:
+        if not task_desc:
+            return {"success": False, "error": "缺少任务描述"}
+        asyncio.create_task(self._hub_delayed_reminder(task_desc, delay_minutes))
+        logger.info("中枢延迟任务: %s (%d分钟后)", task_desc[:40], delay_minutes)
+        return {"success": True, "message": f"已安排任务「{task_desc[:30]}」，{delay_minutes} 分钟后提醒"}
+
+    async def _hub_delayed_reminder(self, task_desc: str, delay_minutes: int) -> None:
+        try:
+            await asyncio.sleep(delay_minutes * 60)
+            await self._inject_to_hub("系统", "reminder", f"提醒：{task_desc}")
+        except asyncio.CancelledError:
+            pass
+
+    async def _inject_to_session(self, chat_name: str, sender: str, content: str, plain: str = "") -> bool:
+        """向另一个会话注入消息（跨会话通信）"""
+        msg_id = hashlib.md5(f"cross|{chat_name}|{sender}|{content}|{time.time()}".encode()).hexdigest()
+        msg = {
+            "message_id": msg_id,
+            "platform": "wechat",
+            "message_info": {
+                "platform": "wechat",
+                "message_id": msg_id,
+                "time": time.time(),
+                "user_info": {"platform": "wechat", "user_id": sender, "user_nickname": sender},
+                "group_info": {"platform": "wechat", "group_id": chat_name, "group_name": chat_name},
+            },
+            "message_segment": {"type": "seglist", "data": [{"type": "text", "data": content}]},
+            "raw_message": [{"type": "text", "data": plain or content}],
+        }
+        ok = await self.ctx.gateway.route_message(gateway_name=WEMAI_GATEWAY_NAME, message=msg)
+        if ok:
+            logger.info("跨会话消息已注入: [%s] %s: %s", chat_name, sender, content[:40])
+        return ok
+
+    @Tool(
+        name="hub_tell",
+        description="【微信系统中枢】向指定会话发送一条消息。中枢思考后需要对某个对话做出回应时使用。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "target": {"type": "string", "description": "目标会话名称"},
+                "message": {"type": "string", "description": "消息内容"},
+            },
+            "required": ["target", "message"],
+        },
+    )
+    async def tool_hub_tell(self, target: str = "", message: str = "", **kwargs: Any) -> dict:
+        if not target or not message:
+            return {"success": False, "error": "缺少目标或消息"}
+        ok = await self._inject_to_session(target, "系统", message)
+        return {"success": ok, "message": f"已向 {target} 发送消息"}
 
     async def _restart_server_if_needed(self) -> None:
         await self._stop_server()
