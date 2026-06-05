@@ -260,7 +260,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 return
 
         # 如果客户端传了 base64 图片数据，解码保存到临时文件
-        if media_base64 and not media_path:
+        if media_base64:
             try:
                 import tempfile
                 raw = base64.b64decode(media_base64)
