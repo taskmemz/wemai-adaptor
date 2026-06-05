@@ -74,7 +74,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         **kwargs: Any,
     ) -> Dict[str, Any]:
         import sys
-        sys.stderr.write("wemai outbound message={message} route={route}\n")
+        sys.stderr.write(f"wemai outbound: {str(message.get('raw_message', ''))[:200]} route={route}\n")
         sys.stderr.flush()
         outbound = {
             "type": "outbound",
