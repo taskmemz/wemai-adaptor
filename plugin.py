@@ -143,9 +143,13 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 if isinstance(sdata, str):
                     result.append({"type": "text", "data": sdata})
             elif stype == "emoji":
-                if isinstance(sdata, str):
+                emoji_b64 = seg.get("binary_data_base64", "")
+                if emoji_b64:
+                    result.append({"type": "image", "data": emoji_b64})
+                elif isinstance(sdata, str):
                     text = emoji_map.get(sdata, "「" + sdata + "」")
-                    result.append({"type": "text", "data": text})
+                    if text:
+                        result.append({"type": "text", "data": text})
                 elif isinstance(sdata, dict):
                     name = sdata.get("emoji_name") or sdata.get("name") or ""
                     text = emoji_map.get(name, "「" + name + "」") if name else ""
