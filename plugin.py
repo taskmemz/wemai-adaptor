@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 import base64
@@ -29,15 +29,12 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         self._ws_server: Optional[WemaiWsServer] = None
         self._pending_requests: dict[str, asyncio.Future] = {}
         self._resp_lock = asyncio.Lock()
-        # 出站消息缓冲（ws_server 不可用或客户端未连接时排队）
         self._pending_outbound: list[dict[str, Any]] = []
-        # 中枢后台任务
         self._hub_task: Optional[asyncio.Task] = None
 
     async def on_load(self) -> None:
         logger.info("on_load 被调用, enabled=%s", self._is_enabled())
         await self._restart_server_if_needed()
-        # 定时轮询已关闭，由工具调用触发中枢思考
 
     def _is_enabled(self) -> bool:
         try:
@@ -60,7 +57,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         try:
             await asyncio.wait_for(self._push_config_to_client(), timeout=5.0)
         except (asyncio.TimeoutError, Exception) as e:
-            logger.debug("推送配置到客户端失败（可能未连接）: %s", e)
+            logger.debug("推送配置到客户端失败: %s", e)
 
     @MessageGateway(
         name=WEMAI_GATEWAY_NAME,
@@ -77,7 +74,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         **kwargs: Any,
     ) -> Dict[str, Any]:
         import sys
-        sys.stderr.write(f"[wemai] outbound message={message} route={route}\n")
+        sys.stderr.write("wemai outbound message={message} route={route}\n")
         sys.stderr.flush()
         outbound = {
             "type": "outbound",
@@ -87,7 +84,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         }
         mi = message.get("message_info", {})
 
-        # 接收者：优先取 additional_config.platform_io_target_user_id
         additional = mi.get("additional_config") or {}
         outbound["receiver"] = (
             additional.get("platform_io_target_user_id")
@@ -103,7 +99,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 or ""
             )
 
-        # 提取文本：raw_message 已经是 list[Seg]，直接遍历
         raw_msg = message.get("raw_message", [])
         if raw_msg:
             segments, at_members = self._build_segments_from_raw(raw_msg)
@@ -117,7 +112,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         outbound["at_members"] = at_members
 
         if outbound["receiver"] and segments:
-            # 中枢消息不回传给微信客户端
             if outbound["receiver"] in (self.HUB_SESSION_NAME, "系统"):
                 logger.debug("中枢消息已拦截: %s", outbound["segments"])
                 return {"success": True}
@@ -133,12 +127,12 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         result: list[dict] = []
         at_members: list[str] = []
         emoji_map = {
-            "laugh": "[呲牙]", "smile": "[微笑]", "cry": "[流泪]", "angry": "[发怒]",
-            "surprised": "[惊讶]", "fear": "[恐惧]", "cool": "[酷]", "sad": "[难过]",
-            "shy": "[害羞]", "sleepy": "[困]", "love": "[爱心]", "ok": "[OK]",
-            "clap": "[鼓掌]", "think": "[思考]", "wave": "[挥手]", "strong": "[强]",
-            "weak": "[弱]", "rose": "[玫瑰]", "heart": "[爱心]", "broken_heart": "[心碎]",
-            "cake": "[蛋糕]", "coffee": "[咖啡]", "beer": "[啤酒]",
+            "laugh": "「呲牙」", "smile": "「微笑」", "cry": "「流泪」", "angry": "「发怒」",
+            "surprised": "「惊讶」", "fear": "「恐惧」", "cool": "「酷」", "sad": "「难过」",
+            "shy": "「害羞」", "sleepy": "「困」", "love": "「爱心」", "ok": "「OK」",
+            "clap": "「鼓掌」", "think": "「思考」", "wave": "「挥手」", "strong": "「强」",
+            "weak": "「弱」", "rose": "「玫瑰」", "heart": "「爱心」", "broken_heart": "「心碎」",
+            "cake": "「蛋糕」", "coffee": "「咖啡」", "beer": "「啤酒」",
         }
         for seg in raw:
             if not isinstance(seg, dict):
@@ -148,20 +142,19 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             if stype == "text":
                 if isinstance(sdata, str):
                     result.append({"type": "text", "data": sdata})
-                # dict data is reply etc, skip
             elif stype == "emoji":
                 if isinstance(sdata, str):
-                    text = emoji_map.get(sdata, f"[{sdata}]")
+                    text = emoji_map.get(sdata, "「" + sdata + "」")
                     result.append({"type": "text", "data": text})
                 elif isinstance(sdata, dict):
                     name = sdata.get("emoji_name") or sdata.get("name") or ""
-                    text = emoji_map.get(name, f"[{name}]") if name else ""
+                    text = emoji_map.get(name, "「" + name + "」") if name else ""
                     if text:
                         result.append({"type": "text", "data": text})
             elif stype == "at":
                 if isinstance(sdata, str):
                     at_members.append(sdata)
-                    result.append({"type": "text", "data": f"@{sdata} "})
+                    result.append({"type": "text", "data": "@" + sdata + " "})
                 elif isinstance(sdata, dict):
                     name = (
                         sdata.get("user_nickname")
@@ -172,17 +165,16 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                     )
                     if name:
                         at_members.append(name)
-                        result.append({"type": "text", "data": f"@{name} "})
+                        result.append({"type": "text", "data": "@" + name + " "})
             elif stype == "seglist" and isinstance(sdata, (list, tuple)):
                 sub_segs, sub_ats = WemaiAdapterPlugin._build_segments_from_raw(list(sdata))
                 result.extend(sub_segs)
                 at_members.extend(sub_ats)
-        # 从文本段中提取 @某人，追加到 at_members（MaiBot 可能生成 text 而非 at 类型）
         for seg in result:
             if seg.get("type") != "text":
                 continue
             text = seg.get("data", "")
-            for token in re.split(r'[\s(（]+', text):
+            for token in re.split(r"[\s(（]+", text):
                 if token.startswith("@") and len(token) > 1:
                     name = token[1:].rstrip(")）")
                     if name and name not in at_members:
@@ -213,7 +205,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                     if isinstance(sdata, str):
                         result.append(sdata)
                     elif isinstance(sdata, dict):
-                        # e.g. reply seg: {"type":"reply","data":{...}} 
                         pass
                 elif stype == "seglist" and isinstance(sdata, (list, tuple)):
                     result.extend(WemaiAdapterPlugin._extract_text_from_raw(list(sdata)))
@@ -246,10 +237,10 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         sender = data.get("sender", "")
         content = data.get("content", "")
         is_group = data.get("is_group", False)
-        sub_type = data.get("msg_type", "text")  # text | emoji | image | video
-        media_path = data.get("media_path", "")   # 媒体文件路径
-        media_base64 = data.get("media_base64", "")  # base64 编码的媒体文件内容
-        media_ext = data.get("media_ext", ".png")  # 文件扩展名
+        sub_type = data.get("msg_type", "text")
+        media_path = data.get("media_path", "")
+        media_base64 = data.get("media_base64", "")
+        media_ext = data.get("media_ext", ".png")
 
         if not sender or not content:
             return
@@ -263,12 +254,11 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             if not is_group and settings.chat.private_list and chat not in settings.chat.private_list:
                 return
 
-        # 如果客户端传了 base64 图片数据，解码保存到临时文件
         if media_base64:
             try:
                 import tempfile
                 raw = base64.b64decode(media_base64)
-                ext = media_ext if media_ext.startswith(".") else f".{media_ext}"
+                ext = media_ext if media_ext.startswith(".") else "." + media_ext
                 tmp = tempfile.NamedTemporaryFile(suffix=ext, delete=False)
                 tmp.write(raw)
                 tmp.close()
@@ -278,14 +268,13 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 logger.warning("保存媒体文件失败: %s", e)
 
         msg_id = hashlib.md5(
-            f"{chat}|{sender}|{content}|{time.time()}".encode()
+            (chat + "|" + sender + "|" + content + "|" + str(time.time())).encode()
         ).hexdigest()
 
         group_info_val = None
         if is_group:
             group_info_val = {"platform": "wechat", "group_id": chat, "group_name": chat}
 
-        # 根据消息子类型构造 segment
         if sub_type == "emoji":
             seg_data: list[dict] = [{"type": "emoji", "data": {"emoji_name": "animated_sticker"}}]
             if media_path:
@@ -328,20 +317,17 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             logger.warning("入站被拒绝: [%s] %s", chat, sender)
 
     async def _handle_friend_request(self, data: Dict[str, Any]) -> None:
-        """处理好友请求：通知中枢和管理员"""
         content = data.get("content", "")
         details = data.get("details", "")
         logger.info("收到好友请求: %s %s", content, details)
-        # 通知中枢
-        msg = f"收到好友请求: {content}" + (f" ({details})" if details else "")
-        await self._inject_to_hub("系统", f"friend:{content}", msg)
-        # 如果有管理员，也通知管理员
+        msg = "收到好友请求: " + content + (" (" + details + ")" if details else "")
+        await self._inject_to_hub("系统", "friend:" + content, msg)
         settings = self._load_settings()
         if settings.admin:
             await self._send_outbound({
                 "type": "outbound",
                 "receiver": settings.admin,
-                "segments": [{"type": "text", "data": "[好友请求] " + msg]},
+                "segments": [{"type": "text", "data": "好友请求: " + msg}],
                 "at_members": [],
             })
 
@@ -360,8 +346,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             ok = await self._ws_server.send_outbound(data)
             if ok:
                 return True
-            # ws_server 返回 False → 客户端断开且队列满了等极端情况
-        # 插件层本地排队，保证永不丢失
         self._pending_outbound.append(data)
         return True
 
@@ -425,7 +409,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
     # ─── 微信系统中枢 ──────────────────────────────
 
     def _start_hub_tick(self) -> None:
-        """启动中枢定时思考"""
         self._stop_hub_tick()
         self._hub_task = asyncio.create_task(self._hub_tick_loop())
 
@@ -435,7 +418,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             self._hub_task = None
 
     async def _hub_tick_loop(self) -> None:
-        """随机间隔（3-10分钟）向中枢注入 tick，驱动自动思考"""
         import random as _random
         try:
             while True:
@@ -449,8 +431,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             pass
 
     async def _inject_to_hub(self, sender: str, content: str, plain: str = "") -> None:
-        """向「微信系统」中枢会话注入一条消息，触发 HeartFlow 思考"""
-        msg_id = hashlib.md5(f"hub|{sender}|{content}|{time.time()}".encode()).hexdigest()
+        msg_id = hashlib.md5(("hub|" + sender + "|" + content + "|" + str(time.time())).encode()).hexdigest()
         msg = {
             "message_id": msg_id,
             "platform": "wechat",
@@ -493,7 +474,8 @@ class WemaiAdapterPlugin(MaiBotPlugin):
     async def tool_hub_send_notification(self, title: str = "", content: str = "", **kwargs: Any) -> dict:
         if not content:
             return {"success": False, "error": "缺少通知内容"}
-        text = f"[系统通知] {title} {content}".strip()
+        text = "系统通知: " + title + " " + content
+        text = text.strip()
         await self._send_outbound({
             "type": "outbound",
             "receiver": self.HUB_SESSION_NAME,
@@ -501,8 +483,8 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             "at_members": [],
         })
         logger.info("中枢通知: %s", text[:60])
-        asyncio.create_task(self._inject_to_hub("系统", f"notice:{title}", f"已发送通知: {content[:40]}"))
-        return {"success": True, "message": f"通知已发送: {text[:40]}"}
+        asyncio.create_task(self._inject_to_hub("系统", "notice:" + title, "已发送通知: " + content[:40]))
+        return {"success": True, "message": "通知已发送: " + text[:40]}
 
     @Tool(
         name="hub_check_chat_status",
@@ -531,18 +513,17 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             return {"success": False, "error": "缺少任务描述"}
         asyncio.create_task(self._hub_delayed_reminder(task_desc, delay_minutes))
         logger.info("中枢延迟任务: %s (%d分钟后)", task_desc[:40], delay_minutes)
-        return {"success": True, "message": f"已安排任务「{task_desc[:30]}」，{delay_minutes} 分钟后提醒"}
+        return {"success": True, "message": "已安排任务「" + task_desc[:30] + "」，" + str(delay_minutes) + " 分钟后提醒"}
 
     async def _hub_delayed_reminder(self, task_desc: str, delay_minutes: int) -> None:
         try:
             await asyncio.sleep(delay_minutes * 60)
-            await self._inject_to_hub("系统", "reminder", f"提醒：{task_desc}")
+            await self._inject_to_hub("系统", "reminder", "提醒：" + task_desc)
         except asyncio.CancelledError:
             pass
 
     async def _inject_to_session(self, chat_name: str, sender: str, content: str, plain: str = "") -> bool:
-        """向另一个会话注入消息（跨会话通信）"""
-        msg_id = hashlib.md5(f"cross|{chat_name}|{sender}|{content}|{time.time()}".encode()).hexdigest()
+        msg_id = hashlib.md5(("cross|" + chat_name + "|" + sender + "|" + content + "|" + str(time.time())).encode()).hexdigest()
         msg = {
             "message_id": msg_id,
             "platform": "wechat",
@@ -577,7 +558,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         if not target or not message:
             return {"success": False, "error": "缺少目标或消息"}
         ok = await self._inject_to_session(target, "系统", message)
-        return {"success": ok, "message": f"已向 {target} 发送消息"}
+        return {"success": ok, "message": "已向 " + target + " 发送消息"}
 
     @Tool(
         name="hub_approve_friend",
@@ -593,7 +574,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
     async def tool_hub_approve_friend(self, friend_name: str = "", **kwargs: Any) -> dict:
         if not friend_name:
             return {"success": False, "error": "缺少好友名称"}
-        # 通知客户端去验证好友
         settings = self._load_settings()
         if settings.admin:
             await self._send_outbound({
@@ -601,7 +581,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 "friend_name": friend_name,
             })
             logger.info("好友批准指令已发送: %s", friend_name)
-            return {"success": True, "message": f"已通知客户端批准 {friend_name} 的好友申请"}
+            return {"success": True, "message": "已通知客户端批准 " + friend_name + " 的好友申请"}
         return {"success": False, "error": "未配置管理员"}
 
     async def _restart_server_if_needed(self) -> None:
@@ -616,7 +596,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         if self._ws_server is not None:
             self._ws_server.set_inbound_handler(self._handle_client_inbound)
             await self._ws_server.start()
-            # 发送启动前排队的所有出站消息
             await self._drain_pending_outbound()
             await self.ctx.gateway.update_state(
                 gateway_name=WEMAI_GATEWAY_NAME,
