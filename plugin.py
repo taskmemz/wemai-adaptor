@@ -235,6 +235,10 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                     future.set_result(data)
             return
 
+        if msg_type == "friend_request":
+            await self._handle_friend_request(data)
+            return
+
         if msg_type != "inbound":
             return
 
@@ -322,6 +326,24 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             logger.info("入站已注入: [%s] %s: %s", chat, sender, content[:60])
         else:
             logger.warning("入站被拒绝: [%s] %s", chat, sender)
+
+    async def _handle_friend_request(self, data: Dict[str, Any]) -> None:
+        """处理好友请求：通知中枢和管理员"""
+        content = data.get("content", "")
+        details = data.get("details", "")
+        logger.info("收到好友请求: %s %s", content, details)
+        # 通知中枢
+        msg = f"收到好友请求: {content}" + (f" ({details})" if details else "")
+        await self._inject_to_hub("系统", f"friend:{content}", msg)
+        # 如果有管理员，也通知管理员
+        settings = self._load_settings()
+        if settings.admin:
+            await self._send_outbound({
+                "type": "outbound",
+                "receiver": settings.admin,
+                "segments": [{"type": "text", "data": f"[好友请求] {msg}"]},
+                "at_members": [],
+            })
 
     async def _push_config_to_client(self) -> None:
         settings = self._load_settings()
@@ -556,6 +578,31 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             return {"success": False, "error": "缺少目标或消息"}
         ok = await self._inject_to_session(target, "系统", message)
         return {"success": ok, "message": f"已向 {target} 发送消息"}
+
+    @Tool(
+        name="hub_approve_friend",
+        description="【微信系统中枢】批准一个好友请求。参数: friend_name=对方昵称或验证消息中的名字。调用后中枢会通知客户端通过该好友申请。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "friend_name": {"type": "string", "description": "要批准的好友昵称或验证消息中的名字"},
+            },
+            "required": ["friend_name"],
+        },
+    )
+    async def tool_hub_approve_friend(self, friend_name: str = "", **kwargs: Any) -> dict:
+        if not friend_name:
+            return {"success": False, "error": "缺少好友名称"}
+        # 通知客户端去验证好友
+        settings = self._load_settings()
+        if settings.admin:
+            await self._send_outbound({
+                "type": "friend_approve",
+                "friend_name": friend_name,
+            })
+            logger.info("好友批准指令已发送: %s", friend_name)
+            return {"success": True, "message": f"已通知客户端批准 {friend_name} 的好友申请"}
+        return {"success": False, "error": "未配置管理员"}
 
     async def _restart_server_if_needed(self) -> None:
         await self._stop_server()
