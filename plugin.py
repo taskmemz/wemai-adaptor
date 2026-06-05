@@ -255,6 +255,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 return
 
         if media_base64:
+            logger.info("收到媒体数据: type=%s len=%d 前20字符=%s", sub_type, len(media_base64), media_base64[:20])
             try:
                 import tempfile
                 raw = base64.b64decode(media_base64)
