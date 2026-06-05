@@ -255,7 +255,9 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 return
 
         if media_base64:
-            logger.info("收到媒体数据: type=%s len=%d 前20字符=%s", sub_type, len(media_base64), media_base64[:20])
+            import sys as _sys
+            _sys.stderr.write(f"wemai media: type={sub_type} len={len(media_base64)} first20={media_base64[:20]}\n")
+            _sys.stderr.flush()
             try:
                 import tempfile
                 raw = base64.b64decode(media_base64)
@@ -264,7 +266,8 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 tmp.write(raw)
                 tmp.close()
                 media_path = tmp.name
-                logger.info("已保存媒体文件: %s (%d bytes)", media_path, len(raw))
+                _sys.stderr.write(f"wemai media saved: {media_path} ({len(raw)} bytes)\n")
+                _sys.stderr.flush()
             except Exception as e:
                 logger.warning("保存媒体文件失败: %s", e)
 
