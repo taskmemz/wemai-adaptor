@@ -37,7 +37,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
     async def on_load(self) -> None:
         logger.info("on_load 被调用, enabled=%s", self._is_enabled())
         await self._restart_server_if_needed()
-        self._start_hub_tick()
+        # 定时轮询已关闭，由工具调用触发中枢思考
 
     def _is_enabled(self) -> bool:
         try:
