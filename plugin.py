@@ -281,10 +281,12 @@ class WemaiAdapterPlugin(MaiBotPlugin):
 
         if sub_type == "emoji":
             seg_data: list[dict] = [{"type": "emoji", "data": {"emoji_name": "animated_sticker"}}]
-            if media_path:
-                seg_data.append({"type": "image", "data": media_path})
+            if media_base64:
+                seg_data.append({"type": "image", "content": media_base64})
         elif sub_type == "image":
-            seg_data = [{"type": "image", "data": media_path or content}]
+            seg_data = [{"type": "image", "content": media_base64 or content}]
+        elif sub_type == "video":
+            seg_data = [{"type": "video", "data": media_path or content}]
         elif sub_type == "video":
             seg_data = [{"type": "video", "data": media_path or content}]
         else:
