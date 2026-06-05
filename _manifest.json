@@ -24,7 +24,16 @@
     "max_version": "2.99.99"
   },
   "dependencies": [],
-  "capabilities": [],
+  "capabilities": [
+    "platform:wechat",
+    "gateway:duplex",
+    "message:text",
+    "message:emoji",
+    "message:image",
+    "friend:request",
+    "moment:read",
+    "moment:post"
+  ],
   "i18n": {
     "default_locale": "zh-CN",
     "supported_locales": ["zh-CN", "en-US"]
