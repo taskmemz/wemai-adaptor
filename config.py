@@ -105,7 +105,6 @@ class WemaiPluginSettings(PluginConfigBase):
             "hint": "留空则不启用管理员功能。填写微信联系人名字。",
             "label": "管理员",
             "order": 10,
-            "placeholder": "某不知名的赵",
         },
     )
 
