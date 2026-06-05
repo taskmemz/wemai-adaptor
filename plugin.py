@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 import base64
@@ -341,7 +341,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             await self._send_outbound({
                 "type": "outbound",
                 "receiver": settings.admin,
-                "segments": [{"type": "text", "data": f"[好友请求] {msg}"]},
+                "segments": [{"type": "text", "data": "[好友请求] " + msg]},
                 "at_members": [],
             })
 
