@@ -309,6 +309,10 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                     "user_nickname": sender,
                 },
                 "group_info": group_info_val,
+                "additional_config": {
+                    "platform_io_account_id": "懒",
+                    **({"platform_io_target_group_id": chat} if is_group else {"platform_io_target_user_id": sender}),
+                },
             },
             "message_segment": {
                 "type": "seglist",
