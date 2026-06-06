@@ -288,16 +288,16 @@ class WemaiAdapterPlugin(MaiBotPlugin):
 
         if sub_type == "emoji":
             seg_data: list[dict] = [{"type": "emoji", "data": {"emoji_name": "animated_sticker"}}]
-            if media_base64:
-                seg_data.append({"type": "image", "data": media_base64})
+            if media_path:
+                seg_data.append({"type": "image", "data": media_path})
         elif sub_type == "image":
-            seg_data = [{"type": "image", "data": media_base64 or content}]
+            seg_data = [{"type": "image", "data": media_path or content}]
         elif sub_type == "video":
             seg_data = [{"type": "video", "data": media_path or content}]
         else:
             seg_data = [{"type": "text", "data": content}]
 
-        # raw_message 只放文本，不放 base64 数据
+        # raw_message 只放文本描述，不放二进制数据
         raw_msg: list[dict] = [{"type": "text", "data": content}]
 
         message_dict = {
