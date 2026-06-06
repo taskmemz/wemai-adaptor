@@ -297,10 +297,8 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         else:
             seg_data = [{"type": "text", "data": content}]
 
-        # 构造 raw_message：有图片时把图片段也加进去
+        # raw_message 只放文本，不放 base64 数据
         raw_msg: list[dict] = [{"type": "text", "data": content}]
-        if media_base64:
-            raw_msg.append({"type": "image", "data": media_base64})
 
         message_dict = {
             "message_id": msg_id,
