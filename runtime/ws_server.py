@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from typing import Any, Callable, Optional
+from typing import Any, Callable
 
 logger = logging.getLogger("wemai_adapter.ws_server")
 
@@ -32,7 +32,7 @@ class WsClient:
             logger.warning("发送到客户端 %s 失败: %s", self.addr, e)
             self._connected = False
 
-    async def recv_json(self) -> Optional[dict[str, Any]]:
+    async def recv_json(self) -> dict[str, Any] | None:
         try:
             raw_len = await self.reader.readexactly(4)
             length = int.from_bytes(raw_len, "big")
@@ -55,9 +55,9 @@ class WemaiWsServer:
     def __init__(self, host: str, port: int) -> None:
         self._host = host
         self._port = port
-        self._server: Optional[asyncio.Server] = None
-        self._client: Optional[WsClient] = None
-        self._on_inbound: Optional[Callable[[dict[str, Any]], None]] = None
+        self._server: asyncio.Server | None = None
+        self._client: WsClient | None = None
+        self._on_inbound: Callable[[dict[str, Any]], None] | None = None
         self._pending_outbound: list[dict[str, Any]] = []
 
     def set_inbound_handler(self, handler: Callable[[dict[str, Any]], None]) -> None:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Mapping
-from typing import Any, ClassVar, Dict, List, Optional
+from typing import Any, ClassVar
 
 from maibot_sdk import Field, PluginConfigBase
 
@@ -72,7 +71,7 @@ class WemaiChatConfig(PluginConfigBase):
             "order": 0,
         },
     )
-    group_list: List[str] = Field(
+    group_list: list[str] = Field(
         default_factory=list,
         description="群聊白名单（group_name 列表）。",
         json_schema_extra={
@@ -82,7 +81,7 @@ class WemaiChatConfig(PluginConfigBase):
             "placeholder": "请输入群名",
         },
     )
-    private_list: List[str] = Field(
+    private_list: list[str] = Field(
         default_factory=list,
         description="私聊白名单（nickname 列表）。",
         json_schema_extra={
