@@ -1,6 +1,6 @@
 {
   "manifest_version": 2,
-  "id": "maibot-team.wemai-adapter",
+  "id": "taskmemz.wemai-adapter",
   "version": "1.0.0",
   "name": "WeMai 微信适配器",
   "description": "接收 pyweixin 客户端的 WebSocket 连接，将微信消息桥接到 MaiBot。",
