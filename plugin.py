@@ -142,8 +142,13 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             if stype == "text":
                 if isinstance(sdata, str):
                     result.append({"type": "text", "data": sdata})
-            elif stype in ("image", "video"):
-                # 图片/视频段只在入站处理，不回传给客户端作为文本
+            elif stype == "image":
+                # 图片：binary_data_base64 → 客户端剪贴板粘贴
+                image_b64 = seg.get("binary_data_base64", "")
+                if image_b64:
+                    result.append({"type": "image", "data": image_b64})
+            elif stype == "video":
+                # 视频段暂时不回传
                 pass
             elif stype == "emoji":
                 emoji_b64 = seg.get("binary_data_base64", "")
@@ -297,10 +302,20 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         else:
             seg_data = [{"type": "text", "data": content}]
 
-        # raw_message: 文本段 + 图片段（文件路径，非 base64）
+        # raw_message: 文本段 + 图片/表情段（对齐 Napcat 格式：data="" + binary_data_base64）
         raw_msg: list[dict] = [{"type": "text", "data": content}]
-        if media_path and sub_type in ("emoji", "image"):
-            raw_msg.append({"type": "image", "data": {"file": media_path}})
+        if media_base64 and sub_type in ("emoji", "image"):
+            try:
+                raw_binary = base64.b64decode(media_base64)
+                image_hash = hashlib.sha256(raw_binary).hexdigest()
+            except Exception:
+                image_hash = ""
+            raw_msg.append({
+                "type": "emoji" if sub_type == "emoji" else "image",
+                "data": "",
+                "hash": image_hash,
+                "binary_data_base64": media_base64,
+            })
 
         message_dict = {
             "message_id": msg_id,
