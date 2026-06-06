@@ -142,6 +142,9 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             if stype == "text":
                 if isinstance(sdata, str):
                     result.append({"type": "text", "data": sdata})
+            elif stype in ("image", "video"):
+                # 图片/视频段只在入站处理，不回传给客户端作为文本
+                pass
             elif stype == "emoji":
                 emoji_b64 = seg.get("binary_data_base64", "")
                 if emoji_b64:
