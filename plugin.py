@@ -297,8 +297,10 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         else:
             seg_data = [{"type": "text", "data": content}]
 
-        # raw_message 只放文本描述，不放二进制数据
+        # raw_message: 文本段 + 图片段（文件路径，非 base64）
         raw_msg: list[dict] = [{"type": "text", "data": content}]
+        if media_path and sub_type in ("emoji", "image"):
+            raw_msg.append({"type": "image", "data": {"file": media_path}})
 
         message_dict = {
             "message_id": msg_id,
