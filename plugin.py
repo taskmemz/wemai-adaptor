@@ -291,10 +291,13 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             seg_data = [{"type": "image", "data": media_base64 or content}]
         elif sub_type == "video":
             seg_data = [{"type": "video", "data": media_path or content}]
-        elif sub_type == "video":
-            seg_data = [{"type": "video", "data": media_path or content}]
         else:
             seg_data = [{"type": "text", "data": content}]
+
+        # 构造 raw_message：有图片时把图片段也加进去
+        raw_msg: list[dict] = [{"type": "text", "data": content}]
+        if media_base64:
+            raw_msg.append({"type": "image", "data": media_base64})
 
         message_dict = {
             "message_id": msg_id,
@@ -318,7 +321,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 "type": "seglist",
                 "data": seg_data,
             },
-            "raw_message": [{"type": "text", "data": content}],
+            "raw_message": raw_msg,
         }
 
         accepted = await self.ctx.gateway.route_message(
