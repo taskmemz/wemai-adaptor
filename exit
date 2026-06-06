@@ -1,0 +1,83 @@
+[33mcommit 488d2d0a6f1294dcc62fe5d058b96845b2b52f91[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmaster[m[33m, [m[1;31morigin/master[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: taskmemz <1450594750@qq.com>
+Date:   Sat Jun 6 02:50:48 2026 +0800
+
+    fix: send image as base64, not file path
+
+[33mcommit cb03134af463ac6c1fb201a8a73740d08ddd8b55[m
+Author: taskmemz <1450594750@qq.com>
+Date:   Sat Jun 6 01:54:12 2026 +0800
+
+    fix: use stderr for media debug logs (visible in WebUI)
+
+[33mcommit 7492947a548573c4934d3a002d4437eba83c9983[m
+Author: taskmemz <1450594750@qq.com>
+Date:   Sat Jun 6 01:42:47 2026 +0800
+
+    fix: emoji detection + manifest capabilities + screenshot delay
+
+[33mcommit ff7828a8e2c38ba40d6f5bfc2f863e1c0d465838[m
+Author: taskmemz <1450594750@qq.com>
+Date:   Sat Jun 6 01:27:21 2026 +0800
+
+    debug: log media_base64 arrival
+
+[33mcommit e582d29a9b059514a2eb7f3194c35d4f9596235a[m
+Author: taskmemz <1450594750@qq.com>
+Date:   Sat Jun 6 00:18:23 2026 +0800
+
+    z
+
+[33mcommit b0fd081849d95cf1e23bc84796de901712514976[m
+Author: taskmemz <1450594750@qq.com>
+Date:   Sat Jun 6 00:13:05 2026 +0800
+
+    阿# Please enter the commit message for your changes. Lines starting
+
+[33mcommit bf7c5acf99bf68b07b0f590c15fbbc3169b72c3d[m
+Author: taskmemz <1450594750@qq.com>
+Date:   Fri Jun 5 23:53:09 2026 +0800
+
+    test
+
+[33mcommit 84832b87d6a4810bf284a01856ab71a57ea877b4[m
+Author: taskmemz <1450594750@qq.com>
+Date:   Fri Jun 5 23:49:24 2026 +0800
+
+    add feature
+
+[33mcommit 7fff581647f32a3d627731b90b26612d514d4441[m
+Author: taskmemz <1450594750@qq.com>
+Date:   Fri Jun 5 23:23:50 2026 +0800
+
+    removed ticks
+
+[33mcommit 6903eebe80eab78594c39032e672cc6600e51f3f[m
+Author: taskmemz <1450594750@qq.com>
+Date:   Fri Jun 5 18:44:02 2026 +0800
+
+    aaa
+
+[33mcommit af85de6485db1b0cef47446976b1d8277c6aa140[m
+Author: taskmemz <1450594750@qq.com>
+Date:   Sun May 31 16:56:03 2026 +0800
+
+    bug fix
+
+[33mcommit 144df9ae7199478167b61c3031b0bdb92c5c5503[m
+Author: taskmemz <1450594750@qq.com>
+Date:   Sun May 31 04:01:50 2026 +0800
+
+    做了些功能
+
+[33mcommit 79bae2398adf24d0cbce892516635c523ccd6875[m
+Author: taskmemz <1450594750@qq.com>
+Date:   Sat May 30 23:46:26 2026 +0800
+
+    做了一些兜底措施
+
+[33mcommit d0cf292bc279c99cb98ee2bc28f7738d3e8865ad[m
+Author: taskmemz <1450594750@qq.com>
+Date:   Sun May 24 00:19:39 2026 +0800
+
+    first push
