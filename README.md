@@ -49,7 +49,7 @@
 将 `wemai-adaptor/` 放入 MaiBot 的 `plugins/` 目录，在 WebUI 中启用插件。
 
 ```bash
-git clone https://github.com/Mai-with-u/wemai-adapter
+git clone https://github.com/taskmemz/wemai-adapter
 cp -r wemai-adapter /path/to/MaiBot/plugins/
 ```
 
