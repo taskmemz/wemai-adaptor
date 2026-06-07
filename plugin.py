@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import base64
 import hashlib
+import json
 import logging
 import os
 import random
@@ -20,6 +21,35 @@ from .constants import WEMAI_GATEWAY_NAME
 from .runtime import WemaiWsServer
 
 logger = logging.getLogger("wemai_adapter")
+
+PLUGIN_DIR = os.path.dirname(os.path.abspath(__file__))
+STATE_FILE = os.path.join(PLUGIN_DIR, "plugin_state.json")
+
+
+def _load_admin_state() -> str:
+    """从 state 文件读取持久化的 admin 字段。"""
+    try:
+        with open(STATE_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data.get("admin", "") or ""
+    except (FileNotFoundError, json.JSONDecodeError, OSError):
+        return ""
+
+
+def _save_admin_state(admin: str) -> None:
+    """将 admin 字段持久化到 state 文件。"""
+    try:
+        data = {}
+        try:
+            with open(STATE_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (FileNotFoundError, json.JSONDecodeError):
+            pass
+        data["admin"] = admin
+        with open(STATE_FILE, "w", encoding="utf-8") as f:
+            json.dump(data, f, ensure_ascii=False)
+    except Exception as e:
+        logger.debug("保存 admin state 失败: %s", e)
 
 
 class WemaiAdapterPlugin(MaiBotPlugin):
@@ -53,22 +83,30 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         if scope != "self":
             return
 
-        # 记录旧值，用于判断是否需要重启 & 防止 admin 被意外清空
+        # 记录旧值，用于判断是否需要重启
         old_settings = self._load_settings()
         old_enabled = old_settings.plugin.enabled
         old_host = old_settings.ws_server.host
         old_port = old_settings.ws_server.port
-        old_admin = old_settings.admin
 
         self.set_plugin_config(config_data)
-
-        # 如果 config_data 没有 admin 或设置为空，保留旧值
         new_settings = self._load_settings()
-        admin_in_config = config_data.get("admin")
-        if not admin_in_config and old_admin:
-            new_settings.admin = old_admin
-            logger.debug("admin 字段保留旧值: %s", old_admin)
 
+        # ── admin 持久化 ──────────────────────────────────────────
+        # admin 存入独立 state 文件，不依赖 MaiBot 的 config 保存/加载
+        admin_from_config = config_data.get("admin", "")
+        if admin_from_config:
+            # 用户通过 UI 主动设置 → 持久化
+            _save_admin_state(admin_from_config)
+            logger.debug("admin 已持久化: %s", admin_from_config)
+        else:
+            # config 里没有 admin → 从 state 文件恢复
+            saved_admin = _load_admin_state()
+            if saved_admin:
+                new_settings.admin = saved_admin
+                logger.debug("admin 从 state 文件恢复: %s", saved_admin)
+
+        # ── 重启控制 ──────────────────────────────────────────────
         # 只有连接相关配置变化时才重启服务器，避免定期 config 更新导致死循环
         conn_changed = (
             old_enabled != new_settings.plugin.enabled
