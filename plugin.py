@@ -355,10 +355,10 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         msg = f"收到好友请求: {content}{' (' + details + ')' if details else ''}"
         await self._inject_to_hub("系统", f"friend:{content}", msg)
         settings = self._load_settings()
-        if settings.admin.name:
+        if settings.plugin.admin:
             await self._send_outbound({
                 "type": "outbound",
-                "receiver": settings.admin.name,
+                "receiver": settings.plugin.admin,
                 "segments": [{"type": "text", "data": f"好友请求: {msg}"}],
                 "at_members": [],
             })
@@ -605,7 +605,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         if not friend_name:
             return {"success": False, "error": "缺少好友名称"}
         settings = self._load_settings()
-        if settings.admin.name:
+        if settings.plugin.admin:
             await self._send_outbound({
                 "type": "friend_approve",
                 "friend_name": friend_name,
