@@ -348,20 +348,20 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         else:
             logger.warning("入站被拒绝: [%s] %s", chat, sender)
 
+    _FRIEND_SEEN: set[str] = set()
+
     async def _handle_friend_request(self, data: dict[str, Any]) -> None:
         content = data.get("content", "")
         details = data.get("details", "")
+        if content in self._FRIEND_SEEN:
+            logger.debug("好友请求已处理过，跳过: %s", content)
+            return
+        self._FRIEND_SEEN.add(content)
+        if len(self._FRIEND_SEEN) > 500:
+            self._FRIEND_SEEN.clear()
         logger.info("收到好友请求: %s %s", content, details)
         msg = f"收到好友请求: {content}{' (' + details + ')' if details else ''}"
         await self._inject_to_hub("系统", f"friend:{content}", msg)
-        settings = self._load_settings()
-        if settings.plugin.admin:
-            await self._send_outbound({
-                "type": "outbound",
-                "receiver": settings.plugin.admin,
-                "segments": [{"type": "text", "data": f"好友请求: {msg}"}],
-                "at_members": [],
-            })
 
     async def _push_config_to_client(self) -> None:
         settings = self._load_settings()
@@ -492,7 +492,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
 
     @Tool(
         name="hub_send_notification",
-        description="【微信系统中枢】向用户发送一条系统通知。当需要提醒用户、报告任务结果或通知系统状态时使用。",
+        description="【微信系统中枢】向用户发送一条系统通知。当需要提醒用户、报告任务结果或通知系统状态时使用。比如有好友请求时，在批准/忽略后通过此工具告知对应用户。",
         parameters={
             "type": "object",
             "properties": {
@@ -592,7 +592,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
 
     @Tool(
         name="hub_approve_friend",
-        description="【微信系统中枢】批准一个好友请求。参数: friend_name=对方昵称或验证消息中的名字。调用后中枢会通知客户端通过该好友申请。",
+        description="【微信系统中枢】批准一个好友请求。参数: friend_name=对方昵称或验证消息中的名字。调用后中枢会通知客户端通过该好友申请。需要通知对方的话请配合 hub_send_notification 或 hub_tell 使用。",
         parameters={
             "type": "object",
             "properties": {
@@ -604,15 +604,33 @@ class WemaiAdapterPlugin(MaiBotPlugin):
     async def tool_hub_approve_friend(self, friend_name: str = "", **kwargs: Any) -> dict:
         if not friend_name:
             return {"success": False, "error": "缺少好友名称"}
-        settings = self._load_settings()
-        if settings.plugin.admin:
-            await self._send_outbound({
-                "type": "friend_approve",
-                "friend_name": friend_name,
-            })
-            logger.info("好友批准指令已发送: %s", friend_name)
-            return {"success": True, "message": f"已通知客户端批准 {friend_name} 的好友申请"}
-        return {"success": False, "error": "未配置管理员"}
+        await self._send_outbound({
+            "type": "friend_approve",
+            "friend_name": friend_name,
+        })
+        logger.info("好友批准指令已发送: %s", friend_name)
+        return {"success": True, "message": f"已通知客户端批准 {friend_name} 的好友申请"}
+
+    @Tool(
+        name="hub_dismiss_friend",
+        description="【微信系统中枢】忽略/取消一个好友请求。不添加对方为好友，仅清除通知。参数: friend_name=对方昵称或验证消息中的名字。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "friend_name": {"type": "string", "description": "要忽略的好友昵称或验证消息中的名字"},
+            },
+            "required": ["friend_name"],
+        },
+    )
+    async def tool_hub_dismiss_friend(self, friend_name: str = "", **kwargs: Any) -> dict:
+        if not friend_name:
+            return {"success": False, "error": "缺少好友名称"}
+        await self._send_outbound({
+            "type": "friend_dismiss",
+            "friend_name": friend_name,
+        })
+        logger.info("好友忽略指令已发送: %s", friend_name)
+        return {"success": True, "message": f"已通知客户端忽略 {friend_name} 的好友申请"}
 
     async def _restart_server_if_needed(self) -> None:
         await self._stop_server()
