@@ -290,9 +290,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             group_info_val = {"platform": "wechat", "group_id": chat, "group_name": chat}
 
         if sub_type == "emoji":
-            seg_data: list[dict] = [{"type": "emoji", "data": {"emoji_name": "animated_sticker"}}]
-            if media_path:
-                seg_data.append({"type": "image", "data": media_path})
+            seg_data: list[dict] = [{"type": "image", "data": media_path or content}]
         elif sub_type == "image":
             seg_data = [{"type": "image", "data": media_path or content}]
         elif sub_type == "video":
