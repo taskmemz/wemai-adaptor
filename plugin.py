@@ -360,7 +360,11 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         if len(self._FRIEND_SEEN) > 500:
             self._FRIEND_SEEN.clear()
         logger.info("收到好友请求: %s %s", content, details)
-        msg = f"收到好友请求: {content}{' (' + details + ')' if details else ''}"
+        admin_chats = data.get("admin_chats", [])
+        admin_hint = ""
+        if admin_chats:
+            admin_hint = f" 管理员会话: {', '.join(admin_chats)}（可使用 hub_tell 通知他们）"
+        msg = f"收到好友请求: {content}{' (' + details + ')' if details else ''}.{admin_hint}"
         await self._inject_to_hub("系统", f"friend:{content}", msg)
 
     async def _push_config_to_client(self) -> None:
@@ -574,7 +578,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
 
     @Tool(
         name="hub_tell",
-        description="【微信系统中枢】向指定会话发送一条消息。中枢思考后需要对某个对话做出回应时使用。",
+        description="【微信系统中枢】向指定会话发送一条消息。中枢思考后需要对某个对话做出回应时使用。好友请求的处理结果可通过此工具通知管理员会话。",
         parameters={
             "type": "object",
             "properties": {
