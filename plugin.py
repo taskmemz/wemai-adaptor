@@ -52,11 +52,37 @@ class WemaiAdapterPlugin(MaiBotPlugin):
     async def on_config_update(self, scope: str, config_data: dict[str, Any], version: str) -> None:
         if scope != "self":
             return
+
+        # 记录旧值，用于判断是否需要重启 & 防止 admin 被意外清空
+        old_settings = self._load_settings()
+        old_enabled = old_settings.plugin.enabled
+        old_host = old_settings.ws_server.host
+        old_port = old_settings.ws_server.port
+        old_admin = old_settings.admin
+
         self.set_plugin_config(config_data)
-        try:
-            await self._restart_server_if_needed()
-        except Exception as e:
-            logger.error("重启 WS 服务器失败: %s", e)
+
+        # 如果 config_data 没有 admin 或设置为空，保留旧值
+        new_settings = self._load_settings()
+        admin_in_config = config_data.get("admin")
+        if not admin_in_config and old_admin:
+            new_settings.admin = old_admin
+            logger.debug("admin 字段保留旧值: %s", old_admin)
+
+        # 只有连接相关配置变化时才重启服务器，避免定期 config 更新导致死循环
+        conn_changed = (
+            old_enabled != new_settings.plugin.enabled
+            or old_host != new_settings.ws_server.host
+            or old_port != new_settings.ws_server.port
+        )
+        if conn_changed:
+            try:
+                await self._restart_server_if_needed()
+            except Exception as e:
+                logger.error("重启 WS 服务器失败: %s", e)
+        else:
+            logger.debug("连接配置未变化，跳过服务器重启")
+
         try:
             await asyncio.wait_for(self._push_config_to_client(), timeout=5.0)
         except (asyncio.TimeoutError, Exception) as e:
