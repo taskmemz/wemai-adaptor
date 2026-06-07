@@ -93,19 +93,26 @@ class WemaiChatConfig(PluginConfigBase):
     )
 
 
-class WemaiPluginSettings(PluginConfigBase):
-    plugin: WemaiPluginOptions = Field(default_factory=WemaiPluginOptions)
-    ws_server: WemaiServerConfig = Field(default_factory=WemaiServerConfig)
-    chat: WemaiChatConfig = Field(default_factory=WemaiChatConfig)
-    admin: str = Field(
+class WemaiAdminConfig(PluginConfigBase):
+    __ui_label__: ClassVar[str] = "管理员"
+    __ui_order__: ClassVar[int] = 10
+
+    name: str = Field(
         default="",
         description="管理员用户名。中枢会将好友请求、系统通知等发给该用户，管理员可回应批准。",
         json_schema_extra={
             "hint": "留空则不启用管理员功能。填写微信联系人名字。",
-            "label": "管理员",
-            "order": 10,
+            "label": "管理员用户名",
+            "order": 0,
         },
     )
+
+
+class WemaiPluginSettings(PluginConfigBase):
+    plugin: WemaiPluginOptions = Field(default_factory=WemaiPluginOptions)
+    ws_server: WemaiServerConfig = Field(default_factory=WemaiServerConfig)
+    chat: WemaiChatConfig = Field(default_factory=WemaiChatConfig)
+    admin: WemaiAdminConfig = Field(default_factory=WemaiAdminConfig)
 
     def should_connect(self) -> bool:
         return self.plugin.should_connect()
