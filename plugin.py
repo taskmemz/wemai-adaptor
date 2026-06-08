@@ -309,7 +309,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             except Exception:
                 image_hash = ""
             raw_msg.append({
-                "type": "emoji" if sub_type == "emoji" else "image",
+                "type": "image",
                 "data": "",
                 "hash": image_hash,
                 "binary_data_base64": media_base64,
