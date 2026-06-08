@@ -35,6 +35,8 @@ class WemaiAdapterPlugin(MaiBotPlugin):
 
     async def on_load(self) -> None:
         logger.info("on_load 被调用, enabled=%s", self._is_enabled())
+        if not hasattr(self, "_FRIEND_SEEN"):
+            self._FRIEND_SEEN: set[str] = set()
         await self._restart_server_if_needed()
 
     def _is_enabled(self) -> bool:
@@ -346,8 +348,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         else:
             logger.warning("入站被拒绝: [%s] %s", chat, sender)
 
-    _FRIEND_SEEN: set[str] = set()
-
     async def _handle_friend_request(self, data: dict[str, Any]) -> None:
         content = data.get("content", "")
         details = data.get("details", "")
@@ -359,10 +359,16 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             self._FRIEND_SEEN.clear()
         logger.info("收到好友请求: %s %s", content, details)
         admin_chats = data.get("admin_chats", [])
-        admin_hint = ""
+        action_hint = ""
         if admin_chats:
-            admin_hint = f" 管理员会话: {', '.join(admin_chats)}（可使用 hub_tell 通知他们）"
-        msg = f"收到好友请求: {content}{' (' + details + ')' if details else ''}.{admin_hint}"
+            action_hint = (
+                f"\n你可以做以下操作：\n"
+                f"1. 批准好友 → 使用 hub_approve_friend(friend_name=\"{content.split('我是')[0] if '我是' in content else content}\")\n"
+                f"2. 忽略请求 → 使用 hub_dismiss_friend(friend_name=\"...\")\n"
+                f"3. 通知管理员 → 使用 hub_tell(target=\"{admin_chats[0]}\", message=\"...\")\n"
+                f"管理员会话: {', '.join(admin_chats)}"
+            )
+        msg = f"收到好友请求: {content} ({details}){action_hint}"
         await self._inject_to_hub("系统", f"friend:{content}", msg)
 
     async def _push_config_to_client(self) -> None:
@@ -372,12 +378,14 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             "enable_filter": settings.chat.enable_chat_list_filter,
             "group_list": settings.chat.group_list,
             "private_list": settings.chat.private_list,
+            "admin": settings.plugin.admin,
         }
         await self._send_outbound(payload)
 
     async def _send_outbound(self, data: dict[str, Any]) -> bool:
-        if self._ws_server is not None:
-            ok = await self._ws_server.send_outbound(data)
+        ws = self._ws_server
+        if ws is not None:
+            ok = await ws.send_outbound(data)
             if ok:
                 return True
         self._pending_outbound.append(data)
@@ -386,12 +394,13 @@ class WemaiAdapterPlugin(MaiBotPlugin):
     async def _drain_pending_outbound(self) -> None:
         if not self._pending_outbound:
             return
-        if self._ws_server is None:
+        ws = self._ws_server
+        if ws is None:
             return
         batch = list(self._pending_outbound)
         self._pending_outbound.clear()
         for data in batch:
-            await self._ws_server.send_outbound(data)
+            await ws.send_outbound(data)
         if batch:
             logger.info("已发送 %d 条排队出站消息", len(batch))
 
@@ -454,12 +463,17 @@ class WemaiAdapterPlugin(MaiBotPlugin):
     async def _hub_tick_loop(self) -> None:
         try:
             while True:
-                delay = random.randint(180, 600)
-                await asyncio.sleep(delay)
                 try:
-                    await self._inject_to_hub("系统", "tick", "定时检查时间")
+                    delay = random.randint(180, 600)
+                    await asyncio.sleep(delay)
+                    try:
+                        await self._inject_to_hub("系统", "tick", "定时检查时间")
+                    except Exception as e:
+                        logger.debug("中枢 tick 注入失败: %s", e)
+                except asyncio.CancelledError:
+                    raise
                 except Exception as e:
-                    logger.debug("中枢 tick 注入失败: %s", e)
+                    logger.warning("中枢 tick 循环异常: %s", e)
         except asyncio.CancelledError:
             pass
 

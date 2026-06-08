@@ -7,6 +7,8 @@ from typing import Any, Callable
 
 logger = logging.getLogger("wemai_adapter.ws_server")
 
+MAX_MESSAGE_SIZE = 10 * 1024 * 1024
+
 
 class WsClient:
     def __init__(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
@@ -36,6 +38,10 @@ class WsClient:
         try:
             raw_len = await self.reader.readexactly(4)
             length = int.from_bytes(raw_len, "big")
+            if length < 0 or length > MAX_MESSAGE_SIZE:
+                logger.warning("拒绝超大消息: %s bytes", length)
+                self._connected = False
+                return None
             payload = await self.reader.readexactly(length)
             return json.loads(payload.decode("utf-8"))
         except (asyncio.IncompleteReadError, ConnectionError, json.JSONDecodeError) as e:

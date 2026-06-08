@@ -25,6 +25,15 @@ class WemaiPluginOptions(PluginConfigBase):
         description="当前配置结构版本。",
         json_schema_extra={"disabled": True, "hidden": True, "label": "配置版本", "order": 99},
     )
+    admin: str = Field(
+        default="",
+        description="管理员用户名。中枢会将好友请求、系统通知等发给该用户。",
+        json_schema_extra={
+            "hint": "留空则不启用。填写微信联系人名字，bot 会将重要通知发至此会话。",
+            "label": "管理员",
+            "order": 10,
+        },
+    )
 
     def should_connect(self) -> bool:
         return self.enabled
