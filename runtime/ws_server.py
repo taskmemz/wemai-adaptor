@@ -135,4 +135,5 @@ class WemaiWsServer:
                         })
         finally:
             logger.info("客户端已断开: %s", client.addr)
-            self._client = None
+            if self._client is client:
+                self._client = None
