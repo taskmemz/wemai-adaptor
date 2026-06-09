@@ -1,0 +1,7 @@
+from __future__ import annotations
+
+WEMAI_GATEWAY_NAME = "wemai_gateway"
+SUPPORTED_CONFIG_VERSION = "1.0.0"
+DEFAULT_WS_HOST = "0.0.0.0"
+DEFAULT_WS_PORT = 9721
+DEFAULT_PLATFORM_ID = "wechat"

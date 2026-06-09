@@ -1,0 +1,41 @@
+{
+  "manifest_version": 2,
+  "id": "taskmemz.wemai-adapter",
+  "version": "1.0.0",
+  "name": "WeMai 微信适配器",
+  "description": "接收 pyweixin 客户端的 WebSocket 连接，将微信消息桥接到 MaiBot。",
+  "author": {
+    "name": "MaiBot Team",
+    "url": "https://github.com/Mai-with-u"
+  },
+  "license": "MIT",
+  "urls": {
+    "repository": "https://github.com/Mai-with-u/wemai-adapter",
+    "homepage": "https://github.com/Mai-with-u/wemai-adapter",
+    "documentation": "https://github.com/Mai-with-u/wemai-adapter",
+    "issues": "https://github.com/Mai-with-u/wemai-adapter/issues"
+  },
+  "host_application": {
+    "min_version": "1.0.0",
+    "max_version": "1.99.99"
+  },
+  "sdk": {
+    "min_version": "2.0.0",
+    "max_version": "2.99.99"
+  },
+  "dependencies": [],
+  "capabilities": [
+    "platform:wechat",
+    "gateway:duplex",
+    "message:text",
+    "message:emoji",
+    "message:image",
+    "friend:request",
+    "moment:read",
+    "moment:post"
+  ],
+  "i18n": {
+    "default_locale": "zh-CN",
+    "supported_locales": ["zh-CN", "en-US"]
+  }
+}
