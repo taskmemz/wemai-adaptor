@@ -317,7 +317,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         else:
             seg_data = [{"type": "text", "data": content}]
 
-        # raw_message: 文本段 + 图片/表情段
+        # raw_message: 文本段 + 图片/表情段 + 链接卡片段
         raw_msg: list[dict] = [{"type": "text", "data": content}]
         if media_base64 and sub_type in ("emoji", "image"):
             try:
@@ -335,6 +335,23 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             raw_msg.append({
                 "type": sub_type,
                 "data": media_url,
+            })
+
+        appmsg_url = data.get("appmsg_url", "")
+        appmsg_title = data.get("appmsg_title", "")
+        appmsg_description = data.get("appmsg_description", "")
+        appmsg_app_name = data.get("appmsg_app_name", "")
+        appmsg_type = data.get("appmsg_type", "")
+        if appmsg_url or appmsg_title:
+            raw_msg.append({
+                "type": "appmsg",
+                "data": {
+                    "url": appmsg_url,
+                    "title": appmsg_title,
+                    "description": appmsg_description,
+                    "app_name": appmsg_app_name,
+                    "app_type": appmsg_type,
+                },
             })
 
         message_dict = {
