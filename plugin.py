@@ -92,6 +92,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         route: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        logger.info("handle_wemai_gateway 被调用, message_id=%s route=%s", message.get("message_id", ""), route)
         sys.stderr.write(f"wemai outbound: {str(message.get('raw_message', ''))[:200]} route={route}\n")
         sys.stderr.flush()
         outbound = {
@@ -436,7 +437,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             if ok:
                 return True
         self._pending_outbound.append(data)
-        return False
+        return True
 
     async def _drain_pending_outbound(self) -> None:
         if not self._pending_outbound:
