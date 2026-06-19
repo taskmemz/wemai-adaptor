@@ -270,16 +270,21 @@ class WemaiAdapterPlugin(MaiBotPlugin):
 
         settings = self._load_settings()
         if settings.chat.enable_chat_list_filter:
-            # 匹配 wxid + 显示名（双向兼容）
-            if is_group and settings.chat.group_list:
-                if not (chat_wxid in settings.chat.group_list
-                        or chat_name in settings.chat.group_list):
+            if is_group:
+                if settings.chat.group_list and not (
+                    chat_wxid in settings.chat.group_list
+                    or chat_name in settings.chat.group_list
+                ):
+                    logger.info("群聊 %s/%s 不在白名单中，已过滤", chat_wxid, chat_name)
                     return
-            if not is_group and settings.chat.private_list:
-                if not (sender_wxid in settings.chat.private_list
-                        or sender_name in settings.chat.private_list
-                        or chat_wxid in settings.chat.private_list
-                        or chat_name in settings.chat.private_list):
+            else:
+                if settings.chat.private_list and not (
+                    sender_wxid in settings.chat.private_list
+                    or sender_name in settings.chat.private_list
+                    or chat_wxid in settings.chat.private_list
+                    or chat_name in settings.chat.private_list
+                ):
+                    logger.info("私聊 %s/%s 不在白名单中，已过滤", sender_wxid, sender_name)
                     return
 
         if media_base64:
@@ -363,7 +368,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 "time": time.time(),
                 "user_info": {
                     "platform": "wechat",
-                    "user_id": sender_wxid,
+                    "user_id": sender_name,
                     "user_nickname": sender_name,
                 },
                 "group_info": group_info_val,
