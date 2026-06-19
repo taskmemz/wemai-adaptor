@@ -48,7 +48,7 @@ class WemaiServerConfig(PluginConfigBase):
         default=DEFAULT_WS_HOST,
         description="WebSocket 服务器监听地址。",
         json_schema_extra={
-            "hint": "pyweixin 客户端将连接到此地址。云服务器上设为 0.0.0.0。",
+            "hint": "wemai 客户端将连接到此地址。云服务器上设为 0.0.0.0。",
             "label": "监听地址",
             "order": 0,
             "placeholder": "0.0.0.0",
@@ -58,7 +58,7 @@ class WemaiServerConfig(PluginConfigBase):
         default=DEFAULT_WS_PORT,
         description="WebSocket 服务器监听端口。",
         json_schema_extra={
-            "hint": "pyweixin 客户端连接到此端口。",
+            "hint": "wemai 客户端连接到此端口。",
             "label": "监听端口",
             "order": 1,
         },
