@@ -94,9 +94,9 @@ class WemaiWsServer:
 
     async def send_outbound(self, data: dict[str, Any]) -> bool:
         if self._client is None or not self._client.connected:
-            logger.info("客户端未连接，消息已排队等待发送")
+            logger.debug("客户端未连接，消息已排队等待发送")
             self._pending_outbound.append(data)
-            return True
+            return False
         await self._client.send_json(data)
         return True
 

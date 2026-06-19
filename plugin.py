@@ -436,7 +436,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             if ok:
                 return True
         self._pending_outbound.append(data)
-        return True
+        return False
 
     async def _drain_pending_outbound(self) -> None:
         if not self._pending_outbound:
