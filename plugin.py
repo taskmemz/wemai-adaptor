@@ -341,18 +341,17 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         appmsg_title = data.get("appmsg_title", "")
         appmsg_description = data.get("appmsg_description", "")
         appmsg_app_name = data.get("appmsg_app_name", "")
-        appmsg_type = data.get("appmsg_type", "")
         if appmsg_url or appmsg_title:
-            raw_msg.append({
-                "type": "appmsg",
-                "data": {
-                    "url": appmsg_url,
-                    "title": appmsg_title,
-                    "description": appmsg_description,
-                    "app_name": appmsg_app_name,
-                    "app_type": appmsg_type,
-                },
-            })
+            parts: list[str] = []
+            if appmsg_title:
+                parts.append(f"标题: {appmsg_title}")
+            if appmsg_description:
+                parts.append(f"摘要: {appmsg_description}")
+            if appmsg_url:
+                parts.append(f"链接: {appmsg_url}")
+            if appmsg_app_name:
+                parts.append(f"来源: {appmsg_app_name}")
+            raw_msg.append({"type": "text", "data": "[分享链接]\n" + "\n".join(parts)})
 
         message_dict = {
             "message_id": msg_id,
