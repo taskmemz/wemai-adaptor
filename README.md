@@ -79,17 +79,28 @@ cp -r wemai-adapter /path/to/MaiBot/plugins/
 
 ## 配置
 
-所有配置在 MaiBot WebUI 的插件管理界面完成：
+所有配置在 MaiBot WebUI 的插件管理界面完成，分为 5 个分组：
 
-| 配置项 | 默认值 | 说明 |
-|---|---|---|
-| `enabled` | `false` | 是否启用 |
-| `host` | `0.0.0.0` | WebSocket 监听地址 |
-| `port` | `9721` | WebSocket 监听端口 |
-| `admin` | `""` | 管理员微信名，同步到 Client 后在好友请求中展示给 LLM |
-| `enable_chat_list_filter` | `false` | 是否按名单过滤聊天 |
-| `group_list` | `[]` | 群聊白名单（空 = 全部） |
-| `private_list` | `[]` | 私聊白名单（空 = 全部） |
+| 分组 | 配置项 | 默认值 | 说明 |
+|------|--------|--------|------|
+| **插件设置** | `enabled` | `false` | 是否启用 |
+| | `config_version` | `1.0.0` | 配置结构版本（自动管理） |
+| | `admin` | `[]` | 管理员会话名列表，中枢通知发给这些会话 |
+| **WebSocket 服务器** | `host` | `0.0.0.0` | WS 监听地址 |
+| | `port` | `9721` | WS 监听端口 |
+| **数据源** | `mode` | `pyweixin` | 下拉选择：`pyweixin`（UIA 自动化）或 `weflow`（WeFlow HTTP API） |
+| | `weflow_base_url` | `http://127.0.0.1:5031` | WeFlow API 地址（仅 weflow 模式生效） |
+| | `weflow_api_token` | `""` | WeFlow Token（仅 weflow 模式生效） |
+| | `weflow_poll_interval` | `0.8` | WeFlow SSE 轮询间隔（秒） |
+| **聊天过滤** | `enable_chat_list_filter` | `false` | 是否按名单过滤 |
+| | `group_list` | `[]` | 群聊白名单（WeFlow: 填 wxid；pyweixin: 填群名） |
+| | `private_list` | `[]` | 私聊白名单（WeFlow: 填 wxid；pyweixin: 填昵称） |
+| **客户端行为** | `send_delay` | `0.2` | 发送间隔（秒） |
+| | `close_weixin` | `false` | 发送后是否关闭微信窗口 |
+| | `include_muted` | `false` | 是否包含免打扰会话 |
+| | `excluded` | `["文件传输助手", "微信团队", "微信支付"]` | 排除的会话名 |
+
+配置通过 WebSocket 连接建立时全量推送给客户端，修改后通过热重载即时生效。
 
 ## 依赖
 

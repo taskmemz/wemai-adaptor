@@ -247,26 +247,39 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         if msg_type != "inbound":
             return
 
-        chat = data.get("chat", "")
-        sender = data.get("sender", "")
+        # ── 解析 wxid 优先字段 ──
+        chat_wxid = data.get("chat", "")
+        chat_name = data.get("chat_name", chat_wxid)
+        sender_wxid = data.get("sender", "")
+        sender_name = data.get("sender_name", sender_wxid)
         content = data.get("content", "")
         is_group = data.get("is_group", False)
         sub_type = data.get("msg_type", "text")
         media_path = data.get("media_path", "")
         media_base64 = data.get("media_base64", "")
         media_ext = data.get("media_ext", ".png")
+        media_url = data.get("media_url", "")
+        server_id = data.get("server_id", "")
 
-        if not sender or not content:
+        if not sender_wxid or not content:
             return
 
-        logger.info("收到入站消息: [%s] %s: %s (%s)", chat, sender, content[:120], sub_type)
+        logger.info("收到入站消息: [%s/%s] %s/%s: %s (%s)",
+                     chat_wxid, chat_name, sender_wxid, sender_name, content[:120], sub_type)
 
         settings = self._load_settings()
         if settings.chat.enable_chat_list_filter:
-            if is_group and settings.chat.group_list and chat not in settings.chat.group_list:
-                return
-            if not is_group and settings.chat.private_list and chat not in settings.chat.private_list:
-                return
+            # 匹配 wxid + 显示名（双向兼容）
+            if is_group and settings.chat.group_list:
+                if not (chat_wxid in settings.chat.group_list
+                        or chat_name in settings.chat.group_list):
+                    return
+            if not is_group and settings.chat.private_list:
+                if not (sender_wxid in settings.chat.private_list
+                        or sender_name in settings.chat.private_list
+                        or chat_wxid in settings.chat.private_list
+                        or chat_name in settings.chat.private_list):
+                    return
 
         if media_base64:
             sys.stderr.write(f"wemai media: type={sub_type} len={len(media_base64)} first20={media_base64[:20]}\n")
@@ -284,23 +297,27 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 logger.warning("保存媒体文件失败: %s", e)
 
         msg_id = hashlib.md5(
-            f"{chat}|{sender}|{content}|{time.time()}".encode()
+            f"{chat_wxid}|{sender_wxid}|{content}|{time.time()}".encode()
         ).hexdigest()
 
         group_info_val = None
         if is_group:
-            group_info_val = {"platform": "wechat", "group_id": chat, "group_name": chat}
+            group_info_val = {
+                "platform": "wechat",
+                "group_id": chat_wxid,
+                "group_name": chat_name,
+            }
 
         if sub_type == "emoji":
-            seg_data: list[dict] = [{"type": "image", "data": media_path or content}]
+            seg_data: list[dict] = [{"type": "image", "data": media_url or media_path or content}]
         elif sub_type == "image":
-            seg_data = [{"type": "image", "data": media_path or content}]
+            seg_data = [{"type": "image", "data": media_url or media_path or content}]
         elif sub_type == "video":
-            seg_data = [{"type": "video", "data": media_path or content}]
+            seg_data = [{"type": "video", "data": media_url or media_path or content}]
         else:
             seg_data = [{"type": "text", "data": content}]
 
-        # raw_message: 文本段 + 图片/表情段（对齐 Napcat 格式：data="" + binary_data_base64）
+        # raw_message: 文本段 + 图片/表情段
         raw_msg: list[dict] = [{"type": "text", "data": content}]
         if media_base64 and sub_type in ("emoji", "image"):
             try:
@@ -314,6 +331,11 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 "hash": image_hash,
                 "binary_data_base64": media_base64,
             })
+        elif media_url and sub_type in ("emoji", "image", "video"):
+            raw_msg.append({
+                "type": sub_type,
+                "data": media_url,
+            })
 
         message_dict = {
             "message_id": msg_id,
@@ -324,12 +346,12 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 "time": time.time(),
                 "user_info": {
                     "platform": "wechat",
-                    "user_id": sender,
-                    "user_nickname": sender,
+                    "user_id": sender_wxid,
+                    "user_nickname": sender_name,
                 },
                 "group_info": group_info_val,
                 "additional_config": {
-                    **({"platform_io_target_group_id": chat} if is_group else {"platform_io_target_user_id": sender}),
+                    **({"platform_io_target_group_id": chat_wxid} if is_group else {"platform_io_target_user_id": sender_name}),
                 },
             },
             "message_segment": {
@@ -344,9 +366,10 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             message=message_dict,
         )
         if accepted:
-            logger.info("入站已注入: [%s] %s: %s", chat, sender, content[:60])
+            logger.info("入站已注入: [%s/%s] %s/%s: %s",
+                         chat_wxid, chat_name, sender_wxid, sender_name, content[:60])
         else:
-            logger.warning("入站被拒绝: [%s] %s", chat, sender)
+            logger.warning("入站被拒绝: [%s] %s", chat_wxid, sender_wxid)
 
     async def _handle_friend_request(self, data: dict[str, Any]) -> None:
         content = data.get("content", "")
@@ -379,6 +402,14 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             "group_list": settings.chat.group_list,
             "private_list": settings.chat.private_list,
             "admin": settings.plugin.admin,
+            "data_source": settings.data_source.mode,
+            "weflow_base_url": settings.data_source.weflow_base_url,
+            "weflow_api_token": settings.data_source.weflow_api_token,
+            "weflow_poll_interval": settings.data_source.weflow_poll_interval,
+            "send_delay": settings.client.send_delay,
+            "close_weixin": settings.client.close_weixin,
+            "include_muted": settings.client.include_muted,
+            "excluded": settings.client.excluded,
         }
         await self._send_outbound(payload)
 
