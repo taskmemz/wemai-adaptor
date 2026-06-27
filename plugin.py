@@ -383,10 +383,18 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             "raw_message": raw_msg,
         }
 
-        accepted = await self.ctx.gateway.route_message(
-            gateway_name=WEMAI_GATEWAY_NAME,
-            message=message_dict,
-        )
+        try:
+            accepted = await self.ctx.gateway.route_message(
+                gateway_name=WEMAI_GATEWAY_NAME,
+                message=message_dict,
+            )
+        except RuntimeError as e:
+            logger.error("入站路由失败(RuntimeError): %s", e)
+            accepted = False
+        except Exception as e:
+            logger.error("入站路由异常: %s", e)
+            accepted = False
+
         if accepted:
             logger.info("入站已注入: [%s/%s] %s/%s: %s",
                          chat_wxid, chat_name, sender_wxid, sender_name, content[:60])
@@ -714,12 +722,24 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             self._ws_server.set_inbound_handler(self._handle_client_inbound)
             await self._ws_server.start()
             await self._drain_pending_outbound()
-            await self.ctx.gateway.update_state(
-                gateway_name=WEMAI_GATEWAY_NAME,
-                ready=True,
-                platform="wechat",
-                metadata={"server": settings.ws_server.build_ws_url()},
-            )
+            # 重试 update_state，给 Host 侧组件注册留出缓冲
+            for retry in range(5):
+                try:
+                    ok = await self.ctx.gateway.update_state(
+                        gateway_name=WEMAI_GATEWAY_NAME,
+                        ready=True,
+                        platform="wechat",
+                        metadata={"server": settings.ws_server.build_ws_url()},
+                    )
+                    if ok:
+                        logger.info("消息网关状态已就绪")
+                        break
+                    logger.warning("update_state 返回 False (第%d次)", retry + 1)
+                except RuntimeError as e:
+                    logger.warning("update_state 失败 (第%d次): %s", retry + 1, e)
+                await asyncio.sleep(0.5)
+            else:
+                logger.warning("消息网关状态未就绪，入站消息将无法注入 Host")
             logger.info(
                 "WeMai 适配器已启动: %s",
                 settings.ws_server.build_ws_url(),
