@@ -2,6 +2,20 @@
 
 > MaiBot 的微信适配器插件 —— 通过 WebSocket 桥接远端的微信客户端，让 LLM 收发微信消息、朋友圈、好友请求。
 
+## ⚠️ 分支说明
+
+**本分支（master）为 WeFlow 模式版本**，通过 WeFlow HTTP API 实现消息收发，无需操控微信 GUI。
+
+> **如果你需要纯 pyweixin 实现（不依赖 WeFlow，请切换到 [`pure-uia`](../../tree/pure-uia) 分支下载。**
+
+⚠️ `pure-uia` 版本存在以下已知差异：
+- emoji 表情通过截图以图片形式识别，无法从微信内直接获取表情包数据
+- 不支持 WeFlow 模式的数据源切换
+- 部分功能（如图片解密、朋友圈读取）依赖 UIA 自动化，稳定性和速度不如 WeFlow
+- 发送仍依赖 pyweixin 的 UIA 操控，WeFlow 版本的发送路径不同
+
+---
+
 ## 是什么
 
 **WeMai Adapter** 是 MaiBot 的插件，部署在服务器上，开放一个 WebSocket 端口等待运行在 Windows 电脑上的 **WeMai Client** 连接。连接建立后，微信消息在这条隧道里双向流动：
