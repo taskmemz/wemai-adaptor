@@ -37,7 +37,10 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         logger.info("on_load 被调用, enabled=%s", self._is_enabled())
         if not hasattr(self, "_FRIEND_SEEN"):
             self._FRIEND_SEEN: set[str] = set()
-        await self._restart_server_if_needed()
+        try:
+            await self._restart_server_if_needed()
+        except Exception as e:
+            logger.error("插件启动异常(已捕获，插件继续运行): %s", e)
 
     def _is_enabled(self) -> bool:
         try:
@@ -718,32 +721,43 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             return
 
         self._ensure_server()
-        if self._ws_server is not None:
-            self._ws_server.set_inbound_handler(self._handle_client_inbound)
+        if self._ws_server is None:
+            return
+
+        self._ws_server.set_inbound_handler(self._handle_client_inbound)
+        try:
             await self._ws_server.start()
-            await self._drain_pending_outbound()
-            # 重试 update_state，给 Host 侧组件注册留出缓冲
-            for retry in range(5):
-                try:
-                    ok = await self.ctx.gateway.update_state(
-                        gateway_name=WEMAI_GATEWAY_NAME,
-                        ready=True,
-                        platform="wechat",
-                        metadata={"server": settings.ws_server.build_ws_url()},
-                    )
-                    if ok:
-                        logger.info("消息网关状态已就绪")
-                        break
-                    logger.warning("update_state 返回 False (第%d次)", retry + 1)
-                except RuntimeError as e:
-                    logger.warning("update_state 失败 (第%d次): %s", retry + 1, e)
-                await asyncio.sleep(0.5)
-            else:
-                logger.warning("消息网关状态未就绪，入站消息将无法注入 Host")
-            logger.info(
-                "WeMai 适配器已启动: %s",
-                settings.ws_server.build_ws_url(),
-            )
+        except OSError as e:
+            logger.error("WS 服务器启动失败(端口被占用?): %s", e)
+            self._ws_server = None
+            return
+        except Exception as e:
+            logger.error("WS 服务器启动异常: %s", e)
+            self._ws_server = None
+            return
+
+        await self._drain_pending_outbound()
+        for retry in range(5):
+            try:
+                ok = await self.ctx.gateway.update_state(
+                    gateway_name=WEMAI_GATEWAY_NAME,
+                    ready=True,
+                    platform="wechat",
+                    metadata={"server": settings.ws_server.build_ws_url()},
+                )
+                if ok:
+                    logger.info("消息网关状态已就绪")
+                    break
+                logger.warning("update_state 返回 False (第%d次)", retry + 1)
+            except RuntimeError as e:
+                logger.warning("update_state 失败 (第%d次): %s", retry + 1, e)
+            await asyncio.sleep(0.5)
+        else:
+            logger.warning("消息网关状态未就绪，入站消息将无法注入 Host")
+        logger.info(
+            "WeMai 适配器已启动: %s",
+            settings.ws_server.build_ws_url(),
+        )
 
     async def _stop_server(self) -> None:
         if self._ws_server is not None:
