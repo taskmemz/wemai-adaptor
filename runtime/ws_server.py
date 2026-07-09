@@ -4,8 +4,6 @@ import asyncio
 import json
 import logging
 import socket
-import struct
-import sys
 from typing import Any, Callable
 
 logger = logging.getLogger("wemai_adapter.ws_server")
@@ -14,14 +12,8 @@ MAX_MESSAGE_SIZE = 10 * 1024 * 1024
 READ_TIMEOUT = 120.0
 
 
-def _set_keepalive(sock: socket.socket, idle_sec: int = 60, interval_sec: int = 10) -> None:
+def _set_keepalive(sock: socket.socket) -> None:
     sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-    if sys.platform == "win32":
-        sock.ioctl(socket.SIO_KEEPALIVE_VALS, struct.pack("II", 1, idle_sec * 1000))
-    else:
-        for opt, val in (("TCP_KEEPIDLE", idle_sec), ("TCP_KEEPINTVL", interval_sec), ("TCP_KEEPCNT", 5)):
-            if hasattr(socket, opt):
-                sock.setsockopt(socket.IPPROTO_TCP, getattr(socket, opt), val)
 
 
 class WsClient:
