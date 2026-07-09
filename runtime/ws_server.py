@@ -3,11 +3,25 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import socket
+import struct
+import sys
 from typing import Any, Callable
 
 logger = logging.getLogger("wemai_adapter.ws_server")
 
 MAX_MESSAGE_SIZE = 10 * 1024 * 1024
+READ_TIMEOUT = 120.0
+
+
+def _set_keepalive(sock: socket.socket, idle_sec: int = 60, interval_sec: int = 10) -> None:
+    sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    if sys.platform == "win32":
+        sock.ioctl(socket.SIO_KEEPALIVE_VALS, struct.pack("II", 1, idle_sec * 1000))
+    else:
+        for opt, val in (("TCP_KEEPIDLE", idle_sec), ("TCP_KEEPINTVL", interval_sec), ("TCP_KEEPCNT", 5)):
+            if hasattr(socket, opt):
+                sock.setsockopt(socket.IPPROTO_TCP, getattr(socket, opt), val)
 
 
 class WsClient:
@@ -110,6 +124,7 @@ class WemaiWsServer:
         logger.info("已发送 %d 条排队消息", len(batch))
 
     async def _on_connect(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        _set_keepalive(writer.get_extra_info("socket"))
         client = WsClient(reader, writer)
         if self._client is not None and self._client.connected:
             logger.warning("已有客户端连接，拒绝新连接: %s", client.addr)

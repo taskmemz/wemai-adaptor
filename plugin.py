@@ -23,8 +23,6 @@ logger = logging.getLogger("wemai_adapter")
 class WemaiAdapterPlugin(MaiBotPlugin):
     config_model: ClassVar[type[PluginConfigBase] | None] = WemaiPluginSettings
 
-    HUB_SESSION_NAME = "微信系统"
-
     def __init__(self) -> None:
         super().__init__()
         self._ws_server: WemaiWsServer | None = None
@@ -96,8 +94,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         logger.info("handle_wemai_gateway 被调用, message_id=%s route=%s", message.get("message_id", ""), route)
-        sys.stderr.write(f"wemai outbound: {str(message.get('raw_message', ''))[:200]} route={route}\n")
-        sys.stderr.flush()
         outbound = {
             "type": "outbound",
             "message_id": message.get("message_id", ""),
@@ -134,9 +130,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         outbound["at_members"] = at_members
 
         if outbound["receiver"] and segments:
-            if outbound["receiver"] in (self.HUB_SESSION_NAME, "系统"):
-                logger.debug("中枢消息已拦截: %s", outbound["segments"])
-                return {"success": True}
             ok = await self._send_outbound(outbound)
             return {
                 "success": ok,
@@ -291,8 +284,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                     return
 
         if media_base64:
-            sys.stderr.write(f"wemai media: type={sub_type} len={len(media_base64)} first20={media_base64[:20]}\n")
-            sys.stderr.flush()
             try:
                 raw = base64.b64decode(media_base64)
                 ext = media_ext if media_ext.startswith(".") else "." + media_ext
@@ -300,8 +291,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 tmp.write(raw)
                 tmp.close()
                 media_path = tmp.name
-                sys.stderr.write(f"wemai media saved: {media_path} ({len(raw)} bytes)\n")
-                sys.stderr.flush()
             except Exception as e:
                 logger.warning("保存媒体文件失败: %s", e)
 
@@ -414,16 +403,11 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         if len(self._FRIEND_SEEN) > 500:
             self._FRIEND_SEEN.clear()
         logger.info("收到好友请求: %s %s", content, details)
-        admin_chats = data.get("admin_chats", [])
-        action_hint = ""
-        if admin_chats:
-            action_hint = (
-                f"\n你可以做以下操作：\n"
-                f"1. 批准好友 → 使用 hub_approve_friend(friend_name=\"{content.split('我是')[0] if '我是' in content else content}\")\n"
-                f"2. 忽略请求 → 使用 hub_dismiss_friend(friend_name=\"...\")\n"
-                f"3. 通知管理员 → 使用 hub_tell(target=\"{admin_chats[0]}\", message=\"...\")\n"
-                f"管理员会话: {', '.join(admin_chats)}"
-            )
+        action_hint = (
+            f"\n这是系统消息，你可以做以下操作：\n"
+            f"1. 自行决定 → 使用 hub_approve_friend 或 hub_dismiss_friend，无需回复此会话\n"
+            f"2. 需要询问管理员 → 直接回复此会话"
+        )
         msg = f"收到好友请求: {content} ({details}){action_hint}"
         await self._inject_to_hub("系统", f"friend:{content}", msg)
 
@@ -527,22 +511,40 @@ class WemaiAdapterPlugin(MaiBotPlugin):
     async def _hub_tick_loop(self) -> None:
         try:
             while True:
-                try:
-                    delay = random.randint(180, 600)
-                    await asyncio.sleep(delay)
-                    try:
-                        await self._inject_to_hub("系统", "tick", "定时检查时间")
-                    except Exception as e:
-                        logger.debug("中枢 tick 注入失败: %s", e)
-                except asyncio.CancelledError:
-                    raise
-                except Exception as e:
-                    logger.warning("中枢 tick 循环异常: %s", e)
+                await asyncio.sleep(random.randint(180, 600))
+                await self._inject_to_hub("系统", "tick", "定时检查时间")
         except asyncio.CancelledError:
             pass
 
     async def _inject_to_hub(self, sender: str, content: str, plain: str = "") -> None:
-        msg_id = hashlib.md5(f"hub|{sender}|{content}|{time.time()}".encode()).hexdigest()
+        admins = self._load_settings().plugin.admin
+        if not admins:
+            return
+        for admin in admins:
+            msg_id = hashlib.md5(f"sys|{admin}|{sender}|{content}|{time.time()}".encode()).hexdigest()
+            msg = {
+                "message_id": msg_id,
+                "platform": "wechat",
+                "message_info": {
+                    "platform": "wechat",
+                    "message_id": msg_id,
+                    "time": time.time(),
+                    "user_info": {"platform": "wechat", "user_id": "系统", "user_nickname": "系统"},
+                    "group_info": None,
+                    "additional_config": {"platform_io_target_user_id": admin},
+                },
+                "message_segment": {"type": "seglist", "data": [{"type": "text", "data": content}]},
+                "raw_message": [{"type": "text", "data": plain or content}],
+            }
+            ok = await self.ctx.gateway.route_message(gateway_name=WEMAI_GATEWAY_NAME, message=msg)
+            if ok:
+                logger.info("系统消息已注入: [%s] %s", admin, content[:40])
+
+    async def _inject_to_session(self, chat_name: str, sender: str, content: str, plain: str = "", group_info: dict | None = ...) -> bool:
+        if group_info is ...:
+            group_info = {"platform": "wechat", "group_id": chat_name, "group_name": chat_name}
+        prefix = "hub" if group_info is None else "cross"
+        msg_id = hashlib.md5(f"{prefix}|{chat_name}|{sender}|{content}|{time.time()}".encode()).hexdigest()
         msg = {
             "message_id": msg_id,
             "platform": "wechat",
@@ -550,29 +552,20 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 "platform": "wechat",
                 "message_id": msg_id,
                 "time": time.time(),
-                "user_info": {
-                    "platform": "wechat",
-                    "user_id": sender,
-                    "user_nickname": sender,
-                },
-                "group_info": None,
+                "user_info": {"platform": "wechat", "user_id": sender, "user_nickname": sender},
+                "group_info": group_info,
             },
-            "message_segment": {
-                "type": "seglist",
-                "data": [{"type": "text", "data": content}],
-            },
+            "message_segment": {"type": "seglist", "data": [{"type": "text", "data": content}]},
             "raw_message": [{"type": "text", "data": plain or content}],
         }
-        ok = await self.ctx.gateway.route_message(
-            gateway_name=WEMAI_GATEWAY_NAME,
-            message=msg,
-        )
+        ok = await self.ctx.gateway.route_message(gateway_name=WEMAI_GATEWAY_NAME, message=msg)
         if ok:
-            logger.debug("中枢消息已注入: [%s] %s", sender, content[:40])
+            logger.info("消息已注入: [%s] %s: %s", chat_name, sender, content[:40])
+        return ok
 
     @Tool(
         name="hub_send_notification",
-        description="【微信系统中枢】向用户发送一条系统通知。当需要提醒用户、报告任务结果或通知系统状态时使用。比如有好友请求时，在批准/忽略后通过此工具告知对应用户。",
+        description="向管理员发送一条系统通知。当需要报告任务结果、提醒注意或通知系统状态时使用。",
         parameters={
             "type": "object",
             "properties": {
@@ -586,19 +579,13 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         if not content:
             return {"success": False, "error": "缺少通知内容"}
         text = f"系统通知: {title} {content}".strip()
-        await self._send_outbound({
-            "type": "outbound",
-            "receiver": self.HUB_SESSION_NAME,
-            "segments": [{"type": "text", "data": text}],
-            "at_members": [],
-        })
-        logger.info("中枢通知: %s", text[:60])
-        asyncio.create_task(self._inject_to_hub("系统", f"notice:{title}", f"已发送通知: {content[:40]}"))
+        asyncio.create_task(self._inject_to_hub("系统", f"notice:{title}", f"管理员通知: {content[:40]}"))
+        logger.info("管理员通知: %s", text[:60])
         return {"success": True, "message": f"通知已发送: {text[:40]}"}
 
     @Tool(
         name="hub_check_chat_status",
-        description="【微信系统中枢】检查当前所有监控聊天的状态摘要。适合定期巡检，查看各聊天活跃度和待处理事项。",
+        description="检查当前所有监控聊天的状态摘要。适合定期巡检，查看各聊天活跃度和待处理事项。",
     )
     async def tool_hub_check_chat_status(self, **kwargs: Any) -> dict:
         return {
@@ -608,7 +595,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
 
     @Tool(
         name="hub_delayed_task",
-        description="【微信系统中枢】延迟执行一个任务。在指定分钟后向中枢发回提醒。",
+        description="延迟执行一个任务。在指定分钟后向管理员发送提醒。",
         parameters={
             "type": "object",
             "properties": {
@@ -622,7 +609,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         if not task_desc:
             return {"success": False, "error": "缺少任务描述"}
         asyncio.create_task(self._hub_delayed_reminder(task_desc, delay_minutes))
-        logger.info("中枢延迟任务: %s (%d分钟后)", task_desc[:40], delay_minutes)
+        logger.info("延迟任务: %s (%d分钟后)", task_desc[:40], delay_minutes)
         return {"success": True, "message": f"已安排任务「{task_desc[:30]}」，{delay_minutes} 分钟后提醒"}
 
     async def _hub_delayed_reminder(self, task_desc: str, delay_minutes: int) -> None:
@@ -632,29 +619,9 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         except asyncio.CancelledError:
             pass
 
-    async def _inject_to_session(self, chat_name: str, sender: str, content: str, plain: str = "") -> bool:
-        msg_id = hashlib.md5(f"cross|{chat_name}|{sender}|{content}|{time.time()}".encode()).hexdigest()
-        msg = {
-            "message_id": msg_id,
-            "platform": "wechat",
-            "message_info": {
-                "platform": "wechat",
-                "message_id": msg_id,
-                "time": time.time(),
-                "user_info": {"platform": "wechat", "user_id": sender, "user_nickname": sender},
-                "group_info": {"platform": "wechat", "group_id": chat_name, "group_name": chat_name},
-            },
-            "message_segment": {"type": "seglist", "data": [{"type": "text", "data": content}]},
-            "raw_message": [{"type": "text", "data": plain or content}],
-        }
-        ok = await self.ctx.gateway.route_message(gateway_name=WEMAI_GATEWAY_NAME, message=msg)
-        if ok:
-            logger.info("跨会话消息已注入: [%s] %s: %s", chat_name, sender, content[:40])
-        return ok
-
     @Tool(
         name="hub_tell",
-        description="【微信系统中枢】向指定会话发送一条消息。中枢思考后需要对某个对话做出回应时使用。好友请求的处理结果可通过此工具通知管理员会话。",
+        description="向指定会话发送一条消息。需要向其他会话发送消息时使用。",
         parameters={
             "type": "object",
             "properties": {
@@ -672,7 +639,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
 
     @Tool(
         name="hub_approve_friend",
-        description="【微信系统中枢】批准一个好友请求。参数: friend_name=对方昵称或验证消息中的名字。调用后中枢会通知客户端通过该好友申请。需要通知对方的话请配合 hub_send_notification 或 hub_tell 使用。",
+        description="批准一个好友请求。确定可添加对方为好友时直接调用，无需询问管理员。参数: friend_name=对方昵称或验证消息中的名字。",
         parameters={
             "type": "object",
             "properties": {
@@ -693,7 +660,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
 
     @Tool(
         name="hub_dismiss_friend",
-        description="【微信系统中枢】忽略/取消一个好友请求。不添加对方为好友，仅清除通知。参数: friend_name=对方昵称或验证消息中的名字。",
+        description="忽略/取消一个好友请求。不添加对方为好友，直接清除通知。确定无需添加时直接调用，无需询问管理员。参数: friend_name=对方昵称或验证消息中的名字。",
         parameters={
             "type": "object",
             "properties": {
@@ -715,12 +682,10 @@ class WemaiAdapterPlugin(MaiBotPlugin):
     async def _restart_server_if_needed(self) -> None:
         await self._stop_server()
         settings = self._load_settings()
-        if not settings.should_connect():
-            return
-        if not settings.validate_runtime_config():
+        if not settings.should_connect() or not settings.validate_runtime_config():
             return
 
-        self._ensure_server()
+        self._ensure_server(settings)
         if self._ws_server is None:
             return
 
@@ -771,9 +736,10 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         except Exception:
             pass
 
-    def _ensure_server(self) -> None:
+    def _ensure_server(self, settings: WemaiPluginSettings | None = None) -> None:
         if self._ws_server is None:
-            settings = self._load_settings()
+            if settings is None:
+                settings = self._load_settings()
             self._ws_server = WemaiWsServer(
                 host=settings.ws_server.host,
                 port=settings.ws_server.port,
