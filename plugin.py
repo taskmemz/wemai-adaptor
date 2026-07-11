@@ -404,7 +404,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             self._FRIEND_SEEN.clear()
         logger.info("收到好友请求: %s %s", content, details)
         action_hint = (
-            f"\n这是系统消息，你可以做以下操作：\n"
+            f"\n你可做以下操作：\n"
             f"1. 自行决定 → 使用 hub_approve_friend 或 hub_dismiss_friend，无需回复此会话\n"
             f"2. 需要询问管理员 → 直接回复此会话"
         )
@@ -529,12 +529,12 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                     "platform": "wechat",
                     "message_id": msg_id,
                     "time": time.time(),
-                    "user_info": {"platform": "wechat", "user_id": "系统", "user_nickname": "系统"},
+                    "user_info": {"platform": "wechat", "user_id": admin, "user_nickname": admin},
                     "group_info": None,
                     "additional_config": {"platform_io_target_user_id": admin},
                 },
-                "message_segment": {"type": "seglist", "data": [{"type": "text", "data": content}]},
-                "raw_message": [{"type": "text", "data": plain or content}],
+                "message_segment": {"type": "seglist", "data": [{"type": "text", "data": f"[系统消息] {content}"}]},
+                "raw_message": [{"type": "text", "data": f"[系统消息] {plain or content}"}],
             }
             ok = await self.ctx.gateway.route_message(gateway_name=WEMAI_GATEWAY_NAME, message=msg)
             if ok:
