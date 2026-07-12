@@ -41,6 +41,7 @@
 | 定时检查 | — | 内置中枢 tick 驱动 LLM 周期性巡检 |
 | 消息去重 | — | 基于内容+时间的 MD5 去重 |
 | 语音消息 | — | 客户端自动转文字后以 `[语音]xxx` 格式送达 LLM |
+| 连接保持 | — | TCP keepalive 加速 + 客户端 30s 心跳，避免长连接被中间设备踢断 |
 
 ## 架构
 
@@ -127,4 +128,4 @@ cp -r wemai-adapter /path/to/MaiBot/plugins/
 
 **插件日志？** Adapter 的日志通过 MaiBot 的日志系统输出，logger 名为 `wemai_adapter`。
 
-**WS 反复断连？** 将 Client 的 `reconnect_delay` 调大（如 15 秒），避免被中间网络设备限流。如果"0 bytes read"持续出现，检查服务端 MaiBot 是否有异常崩溃。
+**WS 反复断连？** 检查 Client 日志是否出现 "读取 4 字节超时"——可能是中间网络设备静默踢掉了空闲连接。Client 已内置 30 秒心跳 + TCP keepalive 加速（10s/3s/3 次），通常无需额外配置。若仍有问题可尝试将 `reconnect_delay` 调大（如 15 秒）。
