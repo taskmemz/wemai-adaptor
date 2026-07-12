@@ -402,7 +402,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         self._FRIEND_SEEN.add(content)
         if len(self._FRIEND_SEEN) > 500:
             self._FRIEND_SEEN.clear()
-        logger.info("收到好友请求: %s %s", content, details)
+        print(f"[wemai_adapter] 收到好友请求: {content} {details}", flush=True)
         action_hint = (
             f"\n你可做以下操作：\n"
             f"1. 自行决定 → 使用 hub_approve_friend 或 hub_dismiss_friend，无需回复此会话\n"
@@ -410,6 +410,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         )
         msg = f"收到好友请求: {content} ({details}){action_hint}"
         await self._inject_to_hub("系统", f"friend:{content}", msg)
+        print(f"[wemai_adapter] 好友请求注入完成, admins={self._load_settings().plugin.admin}", flush=True)
 
     async def _push_config_to_client(self) -> None:
         settings = self._load_settings()
@@ -538,9 +539,9 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             }
             ok = await self.ctx.gateway.route_message(gateway_name=WEMAI_GATEWAY_NAME, message=msg)
             if ok:
-                logger.info("系统消息已注入: [%s] %s", admin, content[:40])
+                print(f"[wemai_adapter] 系统消息已注入: [{admin}] {content[:40]}", flush=True)
             else:
-                logger.warning("系统消息注入失败: [%s] %s (gateway=%s)", admin, content[:40], WEMAI_GATEWAY_NAME)
+                print(f"[wemai_adapter] 系统消息注入失败: [{admin}] {content[:40]} gateway={WEMAI_GATEWAY_NAME}", flush=True)
 
     async def _inject_to_session(self, chat_name: str, sender: str, content: str, plain: str = "", group_info: dict | None = ...) -> bool:
         if group_info is ...:
