@@ -539,6 +539,8 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             ok = await self.ctx.gateway.route_message(gateway_name=WEMAI_GATEWAY_NAME, message=msg)
             if ok:
                 logger.info("系统消息已注入: [%s] %s", admin, content[:40])
+            else:
+                logger.warning("系统消息注入失败: [%s] %s (gateway=%s)", admin, content[:40], WEMAI_GATEWAY_NAME)
 
     async def _inject_to_session(self, chat_name: str, sender: str, content: str, plain: str = "", group_info: dict | None = ...) -> bool:
         if group_info is ...:
