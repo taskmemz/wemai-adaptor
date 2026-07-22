@@ -41,6 +41,7 @@
 | 定时检查 | — | 内置中枢 tick 驱动 LLM 周期性巡检 |
 | 消息去重 | — | 基于内容+时间的 MD5 去重 |
 | 语音消息 | — | 客户端自动转文字后以 `[语音]xxx` 格式送达 LLM |
+| 引用回复 | `reply_to` 字段 | MaiBot 出站消息带 `reply_to` 时，自动查原文并调用微信引用回复 |
 | 连接保持 | — | TCP keepalive 加速 + 客户端 30s 心跳，避免长连接被中间设备踢断 |
 
 ## 架构
@@ -82,6 +83,22 @@ Client 检测到新好友请求
         ├── hub_dismiss_friend → Client clear=True  → 忽略
         └── hub_tell → 通知管理员或其他会话
 ```
+
+## 引用回复流程
+
+当 MaiBot 使用 `reply` 工具回复消息时，Adapter 自动检测出站消息的 `reply_to` 字段，通过 `ctx.message.get_by_id()` 获取原始消息内容，将原文作为 `reply_to.text` 传给 Client。Client 收到后调用微信的引用回复功能，在 UI 上完成"右键 → 引用 → 输入 → 发送"操作。
+
+```
+MaiBot reply(set_quote=auto)
+  → handle_wemai_gateway 检测 reply_to
+    → ctx.message.get_by_id(reply_to_id)
+      → 提取 processed_plain_text
+        → outbound.reply_to = {text: "原文"}
+          → wemai-client wx_sender
+            → Messages.reply_with_quote(quote_text="原文", reply_messages=["回复"])
+```
+
+需在 `_manifest.json` 中声明 `"message.get_by_id"` 能力。
 
 ## 安装
 
