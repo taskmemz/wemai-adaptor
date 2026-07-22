@@ -130,12 +130,13 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         outbound["at_members"] = at_members
 
         # 调试：打印 message 字段用于定位 reply_to
-        outbound["_debug"] = {
-            "message_keys": list(message.keys()),
-            "message_info_keys": list(mi.keys()) if isinstance(mi, dict) else [],
-            "additional_config": str(mi.get("additional_config", {})) if isinstance(mi, dict) else "",
-            "raw_message_types": [s.get("type") for s in (raw_msg if isinstance(raw_msg, list) else []) if isinstance(s, dict)],
-        }
+        import sys
+        raw_types = [s.get("type") for s in (raw_msg if isinstance(raw_msg, list) else []) if isinstance(s, dict)]
+        print(f"[wemai-adapter] message keys: {list(message.keys())}", file=sys.stderr, flush=True)
+        print(f"[wemai-adapter] message_info keys: {list(mi.keys()) if isinstance(mi, dict) else []}", file=sys.stderr, flush=True)
+        print(f"[wemai-adapter] additional_config: {mi.get('additional_config', {}) if isinstance(mi, dict) else {}}", file=sys.stderr, flush=True)
+        print(f"[wemai-adapter] raw_message types: {raw_types}", file=sys.stderr, flush=True)
+        print(f"[wemai-adapter] reply_to in message: {repr(message.get('reply_to', 'N/A'))}", file=sys.stderr, flush=True)
 
         # 出站时带上上一条用户消息作为引用回复文本
         receiver = outbound["receiver"]
