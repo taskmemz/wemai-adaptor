@@ -94,13 +94,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         route: dict[str, Any] | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        logger.info("handle_wemai_gateway 被调用, message_id=%s route=%s", message.get("message_id", ""), route)
-        logger.info("message keys: %s", list(message.keys()))
-        mi = message.get("message_info", {})
-        if isinstance(mi, dict):
-            logger.info("message_info keys: %s", list(mi.keys()))
-            logger.info("additional_config: %s", mi.get("additional_config", {}))
-        logger.info("raw_message sample: %s", [(s.get("type"), list(s.keys())) for s in (message.get("raw_message") or []) if isinstance(s, dict)])
         outbound = {
             "type": "outbound",
             "message_id": message.get("message_id", ""),
@@ -135,6 +128,14 @@ class WemaiAdapterPlugin(MaiBotPlugin):
 
         outbound["segments"] = segments
         outbound["at_members"] = at_members
+
+        # 调试：打印 message 字段用于定位 reply_to
+        outbound["_debug"] = {
+            "message_keys": list(message.keys()),
+            "message_info_keys": list(mi.keys()) if isinstance(mi, dict) else [],
+            "additional_config": str(mi.get("additional_config", {})) if isinstance(mi, dict) else "",
+            "raw_message_types": [s.get("type") for s in (raw_msg if isinstance(raw_msg, list) else []) if isinstance(s, dict)],
+        }
 
         # 出站时带上上一条用户消息作为引用回复文本
         receiver = outbound["receiver"]
