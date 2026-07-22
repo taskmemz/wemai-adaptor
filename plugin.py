@@ -30,7 +30,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         self._resp_lock = asyncio.Lock()
         self._pending_outbound: list[dict[str, Any]] = []
         self._hub_task: asyncio.Task | None = None
-        self._last_user_msg: dict[str, str] = {}
 
     async def on_load(self) -> None:
         logger.info("on_load 被调用, enabled=%s", self._is_enabled())
@@ -129,19 +128,23 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         outbound["segments"] = segments
         outbound["at_members"] = at_members
 
-        # 调试：打印 message 字段用于定位 reply_to
-        import sys
-        raw_types = [s.get("type") for s in (raw_msg if isinstance(raw_msg, list) else []) if isinstance(s, dict)]
-        print(f"[wemai-adapter] message keys: {list(message.keys())}", file=sys.stderr, flush=True)
-        print(f"[wemai-adapter] message_info keys: {list(mi.keys()) if isinstance(mi, dict) else []}", file=sys.stderr, flush=True)
-        print(f"[wemai-adapter] additional_config: {mi.get('additional_config', {}) if isinstance(mi, dict) else {}}", file=sys.stderr, flush=True)
-        print(f"[wemai-adapter] raw_message types: {raw_types}", file=sys.stderr, flush=True)
-        print(f"[wemai-adapter] reply_to in message: {repr(message.get('reply_to', 'N/A'))}", file=sys.stderr, flush=True)
-
-        # 出站时带上上一条用户消息作为引用回复文本
-        receiver = outbound["receiver"]
-        if receiver and receiver in self._last_user_msg:
-            outbound["reply_to"] = {"text": self._last_user_msg[receiver]}
+        # 从 MaiBot 的 reply_to 字段查原始消息内容
+        reply_to_id = message.get("reply_to", "")
+        if reply_to_id:
+            try:
+                original = await self.ctx.message.get_by_id(reply_to_id)
+                if isinstance(original, dict):
+                    text = original.get("processed_plain_text", "") or ""
+                    if not text:
+                        raw = original.get("raw_message", [])
+                        if isinstance(raw, list):
+                            texts = [s.get("data", "") for s in raw if isinstance(s, dict) and s.get("type") == "text"]
+                            text = "".join(texts) if texts else ""
+                    if text:
+                        outbound["reply_to"] = {"text": text}
+            except Exception as e:
+                import sys
+                print(f"[wemai-adapter] get_by_id failed: {e}", file=sys.stderr, flush=True)
 
         if outbound["receiver"] and segments:
             ok = await self._send_outbound(outbound)
@@ -274,13 +277,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
 
         if not sender_wxid or not content:
             return
-
-        # 记录用户最新消息，用于机器人回复时的引用
-        self._last_user_msg[sender_name] = content
-        if len(self._last_user_msg) > 500:
-            stale = list(self._last_user_msg.keys())[:-400]
-            for k in stale:
-                self._last_user_msg.pop(k, None)
 
         logger.info("收到入站消息: [%s/%s] %s/%s: %s (%s)",
                      chat_wxid, chat_name, sender_wxid, sender_name, content[:120], sub_type)
