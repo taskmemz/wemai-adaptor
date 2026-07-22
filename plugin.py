@@ -130,16 +130,28 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         outbound["segments"] = segments
         outbound["at_members"] = at_members
 
-        reply_to_id = message.get("reply_to") or ""
-        if reply_to_id:
-            # 从原始入站消息查找被引用的文本内容
-            original = self._find_original_text_by_msg_id(reply_to_id)
-            if original:
-                outbound["reply_to"] = {"text": original}
-                logger.info("引用回复: reply_to=%s text=%s", reply_to_id, original[:60])
-            else:
-                outbound["reply_to"] = {"msg_id": reply_to_id}
-                logger.info("引用回复(仅 msg_id): %s", reply_to_id)
+        # 检查 raw_message 中是否有 reply 段（MaiBot 引用回复标志）
+        if raw_msg:
+            for seg in raw_msg:
+                if not isinstance(seg, dict):
+                    continue
+                if str(seg.get("type") or "").strip() != "reply":
+                    continue
+                seg_data = seg.get("data")
+                if isinstance(seg_data, dict):
+                    target_id = str(seg_data.get("target_message_id") or "").strip()
+                else:
+                    target_id = str(seg_data or "").strip()
+                if not target_id:
+                    continue
+                original = self._find_original_text_by_msg_id(target_id)
+                if original:
+                    outbound["reply_to"] = {"text": original}
+                    logger.info("引用回复: target=%s text=%s", target_id, original[:60])
+                else:
+                    outbound["reply_to"] = {"msg_id": target_id}
+                    logger.info("引用回复(仅 msg_id): %s", target_id)
+                break
 
         if outbound["receiver"] and segments:
             ok = await self._send_outbound(outbound)
