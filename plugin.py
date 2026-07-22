@@ -30,6 +30,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         self._resp_lock = asyncio.Lock()
         self._pending_outbound: list[dict[str, Any]] = []
         self._hub_task: asyncio.Task | None = None
+        self._inbound_msg_cache: dict[str, dict] = {}
 
     async def on_load(self) -> None:
         logger.info("on_load 被调用, enabled=%s", self._is_enabled())
@@ -128,6 +129,17 @@ class WemaiAdapterPlugin(MaiBotPlugin):
 
         outbound["segments"] = segments
         outbound["at_members"] = at_members
+
+        reply_to_id = message.get("reply_to") or ""
+        if reply_to_id:
+            # 从原始入站消息查找被引用的文本内容
+            original = self._find_original_text_by_msg_id(reply_to_id)
+            if original:
+                outbound["reply_to"] = {"text": original}
+                logger.info("引用回复: reply_to=%s text=%s", reply_to_id, original[:60])
+            else:
+                outbound["reply_to"] = {"msg_id": reply_to_id}
+                logger.info("引用回复(仅 msg_id): %s", reply_to_id)
 
         if outbound["receiver"] and segments:
             ok = await self._send_outbound(outbound)
@@ -390,6 +402,17 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         if accepted:
             logger.info("入站已注入: [%s/%s] %s/%s: %s",
                          chat_wxid, chat_name, sender_wxid, sender_name, content[:60])
+            self._inbound_msg_cache[msg_id] = {
+                "content": content,
+                "sender": sender_name,
+                "chat": chat_name,
+                "wxid": chat_wxid,
+                "time": time.time(),
+            }
+            if len(self._inbound_msg_cache) > 500:
+                stale = [k for k, v in self._inbound_msg_cache.items() if time.time() - v["time"] > 3600]
+                for k in stale:
+                    self._inbound_msg_cache.pop(k, None)
         else:
             logger.warning("入站被拒绝: [%s] %s", chat_wxid, sender_wxid)
 
@@ -410,6 +433,10 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         )
         msg = f"收到好友请求: {content} ({details}){action_hint}"
         await self._inject_to_hub("系统", f"friend:{content}", msg)
+
+    def _find_original_text_by_msg_id(self, msg_id: str) -> str:
+        cached = self._inbound_msg_cache.get(msg_id, {})
+        return cached.get("content", "")
 
     async def _push_config_to_client(self) -> None:
         settings = self._load_settings()
