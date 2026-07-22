@@ -32,7 +32,8 @@
     "message:image",
     "friend:request",
     "moment:read",
-    "moment:post"
+    "moment:post",
+    "message.get_by_id"
   ],
   "i18n": {
     "default_locale": "zh-CN",
