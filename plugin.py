@@ -12,7 +12,8 @@ import time
 import uuid
 from typing import Any, ClassVar, cast
 
-from maibot_sdk import MaiBotPlugin, MessageGateway, PluginConfigBase, Tool
+from maibot_sdk import HookHandler, MaiBotPlugin, MessageGateway, PluginConfigBase, Tool
+from maibot_sdk.types import HookMode
 
 from .config import WemaiPluginSettings
 from .constants import WEMAI_GATEWAY_NAME
@@ -30,7 +31,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         self._resp_lock = asyncio.Lock()
         self._pending_outbound: list[dict[str, Any]] = []
         self._hub_task: asyncio.Task | None = None
-        self._inbound_msg_cache: dict[str, dict] = {}
+        self._last_user_msg: dict[str, str] = {}
 
     async def on_load(self) -> None:
         logger.info("on_load 被调用, enabled=%s", self._is_enabled())
@@ -130,28 +131,10 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         outbound["segments"] = segments
         outbound["at_members"] = at_members
 
-        # 检查 raw_message 中是否有 reply 段（MaiBot 引用回复标志）
-        if raw_msg:
-            for seg in raw_msg:
-                if not isinstance(seg, dict):
-                    continue
-                if str(seg.get("type") or "").strip() != "reply":
-                    continue
-                seg_data = seg.get("data")
-                if isinstance(seg_data, dict):
-                    target_id = str(seg_data.get("target_message_id") or "").strip()
-                else:
-                    target_id = str(seg_data or "").strip()
-                if not target_id:
-                    continue
-                original = self._find_original_text_by_msg_id(target_id)
-                if original:
-                    outbound["reply_to"] = {"text": original}
-                    logger.info("引用回复: target=%s text=%s", target_id, original[:60])
-                else:
-                    outbound["reply_to"] = {"msg_id": target_id}
-                    logger.info("引用回复(仅 msg_id): %s", target_id)
-                break
+        # 出站时带上上一条用户消息作为引用回复文本
+        receiver = outbound["receiver"]
+        if receiver and receiver in self._last_user_msg:
+            outbound["reply_to"] = {"text": self._last_user_msg[receiver]}
 
         if outbound["receiver"] and segments:
             ok = await self._send_outbound(outbound)
@@ -284,6 +267,13 @@ class WemaiAdapterPlugin(MaiBotPlugin):
 
         if not sender_wxid or not content:
             return
+
+        # 记录用户最新消息，用于机器人回复时的引用
+        self._last_user_msg[sender_name] = content
+        if len(self._last_user_msg) > 500:
+            stale = list(self._last_user_msg.keys())[:-400]
+            for k in stale:
+                self._last_user_msg.pop(k, None)
 
         logger.info("收到入站消息: [%s/%s] %s/%s: %s (%s)",
                      chat_wxid, chat_name, sender_wxid, sender_name, content[:120], sub_type)
