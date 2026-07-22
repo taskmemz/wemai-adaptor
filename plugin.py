@@ -410,17 +410,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         if accepted:
             logger.info("入站已注入: [%s/%s] %s/%s: %s",
                          chat_wxid, chat_name, sender_wxid, sender_name, content[:60])
-            self._inbound_msg_cache[msg_id] = {
-                "content": content,
-                "sender": sender_name,
-                "chat": chat_name,
-                "wxid": chat_wxid,
-                "time": time.time(),
-            }
-            if len(self._inbound_msg_cache) > 500:
-                stale = [k for k, v in self._inbound_msg_cache.items() if time.time() - v["time"] > 3600]
-                for k in stale:
-                    self._inbound_msg_cache.pop(k, None)
         else:
             logger.warning("入站被拒绝: [%s] %s", chat_wxid, sender_wxid)
 
@@ -441,10 +430,6 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         )
         msg = f"收到好友请求: {content} ({details}){action_hint}"
         await self._inject_to_hub("系统", f"friend:{content}", msg)
-
-    def _find_original_text_by_msg_id(self, msg_id: str) -> str:
-        cached = self._inbound_msg_cache.get(msg_id, {})
-        return cached.get("content", "")
 
     async def _push_config_to_client(self) -> None:
         settings = self._load_settings()
