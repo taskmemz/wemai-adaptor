@@ -96,6 +96,12 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         logger.info("handle_wemai_gateway 被调用, message_id=%s route=%s", message.get("message_id", ""), route)
+        logger.info("message keys: %s", list(message.keys()))
+        mi = message.get("message_info", {})
+        if isinstance(mi, dict):
+            logger.info("message_info keys: %s", list(mi.keys()))
+            logger.info("additional_config: %s", mi.get("additional_config", {}))
+        logger.info("raw_message sample: %s", [(s.get("type"), list(s.keys())) for s in (message.get("raw_message") or []) if isinstance(s, dict)])
         outbound = {
             "type": "outbound",
             "message_id": message.get("message_id", ""),
