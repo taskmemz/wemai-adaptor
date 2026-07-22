@@ -132,16 +132,25 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         reply_to_id = message.get("reply_to", "")
         if reply_to_id:
             try:
+                import sys
                 original = await self.ctx.message.get_by_id(reply_to_id)
+                print(f"[wemai-adapter] get_by_id returned type={type(original).__name__}", file=sys.stderr, flush=True)
                 if isinstance(original, dict):
                     text = original.get("processed_plain_text", "") or ""
+                    print(f"[wemai-adapter] processed_plain_text={repr(text[:80])}", file=sys.stderr, flush=True)
                     if not text:
                         raw = original.get("raw_message", [])
+                        print(f"[wemai-adapter] raw_message={raw}", file=sys.stderr, flush=True)
                         if isinstance(raw, list):
                             texts = [s.get("data", "") for s in raw if isinstance(s, dict) and s.get("type") == "text"]
                             text = "".join(texts) if texts else ""
                     if text:
                         outbound["reply_to"] = {"text": text}
+                        print(f"[wemai-adapter] reply_to set: text={repr(text[:60])}", file=sys.stderr, flush=True)
+                    else:
+                        print(f"[wemai-adapter] NO text found in original message", file=sys.stderr, flush=True)
+                else:
+                    print(f"[wemai-adapter] get_by_id not a dict", file=sys.stderr, flush=True)
             except Exception as e:
                 import sys
                 print(f"[wemai-adapter] get_by_id failed: {e}", file=sys.stderr, flush=True)
