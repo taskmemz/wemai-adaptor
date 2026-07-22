@@ -12,8 +12,7 @@ import time
 import uuid
 from typing import Any, ClassVar, cast
 
-from maibot_sdk import HookHandler, MaiBotPlugin, MessageGateway, PluginConfigBase, Tool
-from maibot_sdk.types import HookMode
+from maibot_sdk import MaiBotPlugin, MessageGateway, PluginConfigBase, Tool
 
 from .config import WemaiPluginSettings
 from .constants import WEMAI_GATEWAY_NAME
