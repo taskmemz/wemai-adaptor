@@ -71,7 +71,6 @@ class WemaiWsServer:
         self._client: WsClient | None = None
         self._on_inbound: Callable[[dict[str, Any]], None] | None = None
         self._pending_outbound: list[dict[str, Any]] = []
-        self._heartbeat_task: asyncio.Task | None = None
 
     def set_inbound_handler(self, handler: Callable[[dict[str, Any]], None]) -> None:
         self._on_inbound = handler
@@ -86,9 +85,6 @@ class WemaiWsServer:
         logger.info("WebSocket 服务器已启动: %s:%s", addr[0], addr[1])
 
     async def stop(self) -> None:
-        if self._heartbeat_task is not None:
-            self._heartbeat_task.cancel()
-            self._heartbeat_task = None
         self._pending_outbound.clear()
         if self._client is not None:
             self._client.close()
@@ -129,18 +125,6 @@ class WemaiWsServer:
         self._client = client
         logger.info("客户端已连接: %s", client.addr)
         await self._drain_pending()
-
-        async def _heartbeat() -> None:
-            try:
-                while client.connected:
-                    await asyncio.sleep(30)
-                    if client.connected:
-                        await client.send_json({"type": "ping"})
-            except asyncio.CancelledError:
-                pass
-
-        self._heartbeat_task = asyncio.create_task(_heartbeat())
-
         try:
             while client.connected:
                 msg = await client.recv_json()
@@ -163,9 +147,6 @@ class WemaiWsServer:
                             "error": str(e),
                         })
         finally:
-            if self._heartbeat_task is not None:
-                self._heartbeat_task.cancel()
-                self._heartbeat_task = None
             logger.info("客户端已断开: %s", client.addr)
             if self._client is client:
                 self._client = None
