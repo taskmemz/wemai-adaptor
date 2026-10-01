@@ -3,37 +3,36 @@
   "id": "taskmemz.wemai-adapter",
   "version": "1.0.0",
   "name": "WeMai 微信适配器",
-  "description": "接收 pyweixin 客户端的 WebSocket 连接，将微信消息桥接到 MaiBot。",
+  "description": "接收 pyweixin / WeFlow 客户端的 TCP 连接，将微信消息桥接到 MaiBot。",
   "author": {
-    "name": "MaiBot Team",
-    "url": "https://github.com/Mai-with-u"
+    "name": "taskmemz",
+    "url": "https://github.com/taskmemz"
   },
   "license": "MIT",
   "urls": {
-    "repository": "https://github.com/Mai-with-u/wemai-adapter",
-    "homepage": "https://github.com/Mai-with-u/wemai-adapter",
-    "documentation": "https://github.com/Mai-with-u/wemai-adapter",
-    "issues": "https://github.com/Mai-with-u/wemai-adapter/issues"
+    "repository": "https://github.com/taskmemz/wemai-adaptor",
+    "homepage": "https://github.com/taskmemz/wemai-adaptor",
+    "documentation": "https://github.com/taskmemz/wemai-adaptor",
+    "issues": "https://github.com/taskmemz/wemai-adaptor/issues"
   },
   "host_application": {
     "min_version": "1.0.0",
-    "max_version": "1.99.99"
+    "max_version": "999.999.999"
   },
   "sdk": {
-    "min_version": "2.0.0",
-    "max_version": "2.99.99"
+    "min_version": "1.0.0",
+    "max_version": "999.999.999"
   },
   "dependencies": [],
+  "plugin_type": "adapter",
+  "display": {
+    "icon": {
+      "type": "lucide",
+      "value": "message-square"
+    }
+  },
   "capabilities": [
-    "platform:wechat",
-    "gateway:duplex",
-    "message:text",
-    "message:emoji",
-    "message:image",
-    "friend:request",
-    "moment:read",
-    "moment:post",
-    "message.get_by_id"
+    "send_message"
   ],
   "i18n": {
     "default_locale": "zh-CN",

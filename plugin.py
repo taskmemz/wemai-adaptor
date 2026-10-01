@@ -13,6 +13,7 @@ import uuid
 from typing import Any, ClassVar, cast
 
 from maibot_sdk import MaiBotPlugin, MessageGateway, PluginConfigBase, Tool
+from maibot_sdk.types import ToolParameterInfo, ToolParamType
 
 from .config import WemaiPluginSettings
 from .constants import WEMAI_GATEWAY_NAME
@@ -395,7 +396,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         try:
             accepted = await self.ctx.gateway.route_message(
                 gateway_name=WEMAI_GATEWAY_NAME,
-                message=message_dict,
+                message_dict=message_dict,
             )
         except RuntimeError as e:
             logger.error("入站路由失败(RuntimeError): %s", e)
@@ -483,14 +484,17 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             return {"error": "timeout", "success": False}
 
     @Tool(
-        name="read_wechat_moments",
-        description="读取微信朋友圈的最新动态,返回最近发布的朋友圈内容列表。每次最多读取10条。",
-        parameters={
-            "type": "object",
-            "properties": {
-                "limit": {"type": "integer", "description": "读取条数，最多10条", "default": 5}
-            },
-        },
+        "read_wechat_moments",
+        brief_description="读取微信朋友圈的最新动态，返回最近发布的朋友圈内容列表。",
+        parameters=[
+            ToolParameterInfo(
+                name="limit",
+                param_type=ToolParamType.INTEGER,
+                description="读取条数，最多 10 条",
+                required=False,
+                default=5,
+            ),
+        ],
     )
     async def tool_read_moments(self, limit: int = 5, **kwargs: Any) -> dict:
         result = await self._send_request("moment_read", {"limit": min(limit, 10)})
@@ -499,15 +503,16 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         return {"success": True, "count": count, "moments": moments[:limit]}
 
     @Tool(
-        name="post_wechat_moment",
-        description="发布一条微信朋友圈,可以带文字内容。发布成功后返回发布结果。",
-        parameters={
-            "type": "object",
-            "properties": {
-                "text": {"type": "string", "description": "朋友圈的文字内容"}
-            },
-            "required": ["text"],
-        },
+        "post_wechat_moment",
+        brief_description="发布一条微信朋友圈，可以带文字内容。发布成功后返回发布结果。",
+        parameters=[
+            ToolParameterInfo(
+                name="text",
+                param_type=ToolParamType.STRING,
+                description="朋友圈的文字内容",
+                required=True,
+            ),
+        ],
     )
     async def tool_post_moment(self, text: str, **kwargs: Any) -> dict:
         result = await self._send_request("moment_post", {"text": text})
@@ -553,7 +558,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                 "message_segment": {"type": "seglist", "data": [{"type": "text", "data": f"[系统消息] {content}"}]},
                 "raw_message": [{"type": "text", "data": f"[系统消息] {plain or content}"}],
             }
-            ok = await self.ctx.gateway.route_message(gateway_name=WEMAI_GATEWAY_NAME, message=msg)
+            ok = await self.ctx.gateway.route_message(gateway_name=WEMAI_GATEWAY_NAME, message_dict=msg)
             if ok:
                 logger.info("系统消息已注入: [%s] %s", admin, content[:40])
 
@@ -575,22 +580,28 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             "message_segment": {"type": "seglist", "data": [{"type": "text", "data": content}]},
             "raw_message": [{"type": "text", "data": plain or content}],
         }
-        ok = await self.ctx.gateway.route_message(gateway_name=WEMAI_GATEWAY_NAME, message=msg)
+        ok = await self.ctx.gateway.route_message(gateway_name=WEMAI_GATEWAY_NAME, message_dict=msg)
         if ok:
             logger.info("消息已注入: [%s] %s: %s", chat_name, sender, content[:40])
         return ok
 
     @Tool(
-        name="hub_send_notification",
-        description="向管理员发送一条系统通知。当需要报告任务结果、提醒注意或通知系统状态时使用。",
-        parameters={
-            "type": "object",
-            "properties": {
-                "title": {"type": "string", "description": "通知标题"},
-                "content": {"type": "string", "description": "通知内容"},
-            },
-            "required": ["content"],
-        },
+        "hub_send_notification",
+        brief_description="向管理员发送一条系统通知。当需要报告任务结果、提醒注意或通知系统状态时使用。",
+        parameters=[
+            ToolParameterInfo(
+                name="title",
+                param_type=ToolParamType.STRING,
+                description="通知标题",
+                required=False,
+            ),
+            ToolParameterInfo(
+                name="content",
+                param_type=ToolParamType.STRING,
+                description="通知内容",
+                required=True,
+            ),
+        ],
     )
     async def tool_hub_send_notification(self, title: str = "", content: str = "", **kwargs: Any) -> dict:
         if not content:
@@ -601,8 +612,8 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         return {"success": True, "message": f"通知已发送: {text[:40]}"}
 
     @Tool(
-        name="hub_check_chat_status",
-        description="检查当前所有监控聊天的状态摘要。适合定期巡检，查看各聊天活跃度和待处理事项。",
+        "hub_check_chat_status",
+        brief_description="检查当前所有监控聊天的状态摘要。适合定期巡检，查看各聊天活跃度和待处理事项。",
     )
     async def tool_hub_check_chat_status(self, **kwargs: Any) -> dict:
         return {
@@ -611,16 +622,23 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         }
 
     @Tool(
-        name="hub_delayed_task",
-        description="延迟执行一个任务。在指定分钟后向管理员发送提醒。",
-        parameters={
-            "type": "object",
-            "properties": {
-                "task_desc": {"type": "string", "description": "任务描述"},
-                "delay_minutes": {"type": "integer", "description": "延迟分钟数", "default": 5},
-            },
-            "required": ["task_desc"],
-        },
+        "hub_delayed_task",
+        brief_description="延迟执行一个任务。在指定分钟后向管理员发送提醒。",
+        parameters=[
+            ToolParameterInfo(
+                name="task_desc",
+                param_type=ToolParamType.STRING,
+                description="任务描述",
+                required=True,
+            ),
+            ToolParameterInfo(
+                name="delay_minutes",
+                param_type=ToolParamType.INTEGER,
+                description="延迟分钟数",
+                required=False,
+                default=5,
+            ),
+        ],
     )
     async def tool_hub_delayed_task(self, task_desc: str = "", delay_minutes: int = 5, **kwargs: Any) -> dict:
         if not task_desc:
@@ -637,16 +655,22 @@ class WemaiAdapterPlugin(MaiBotPlugin):
             pass
 
     @Tool(
-        name="hub_tell",
-        description="向指定会话发送一条消息。需要向其他会话发送消息时使用。",
-        parameters={
-            "type": "object",
-            "properties": {
-                "target": {"type": "string", "description": "目标会话名称"},
-                "message": {"type": "string", "description": "消息内容"},
-            },
-            "required": ["target", "message"],
-        },
+        "hub_tell",
+        brief_description="向指定会话发送一条消息。需要向其他会话发送消息时使用。",
+        parameters=[
+            ToolParameterInfo(
+                name="target",
+                param_type=ToolParamType.STRING,
+                description="目标会话名称",
+                required=True,
+            ),
+            ToolParameterInfo(
+                name="message",
+                param_type=ToolParamType.STRING,
+                description="消息内容",
+                required=True,
+            ),
+        ],
     )
     async def tool_hub_tell(self, target: str = "", message: str = "", **kwargs: Any) -> dict:
         if not target or not message:
@@ -655,15 +679,16 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         return {"success": ok, "message": f"已向 {target} 发送消息"}
 
     @Tool(
-        name="hub_approve_friend",
-        description="批准一个好友请求。确定可添加对方为好友时直接调用，无需询问管理员。参数: friend_name=对方昵称或验证消息中的名字。",
-        parameters={
-            "type": "object",
-            "properties": {
-                "friend_name": {"type": "string", "description": "要批准的好友昵称或验证消息中的名字"},
-            },
-            "required": ["friend_name"],
-        },
+        "hub_approve_friend",
+        brief_description="批准一个好友请求。确定可添加对方为好友时直接调用，无需询问管理员。",
+        parameters=[
+            ToolParameterInfo(
+                name="friend_name",
+                param_type=ToolParamType.STRING,
+                description="要批准的好友昵称或验证消息中的名字",
+                required=True,
+            ),
+        ],
     )
     async def tool_hub_approve_friend(self, friend_name: str = "", **kwargs: Any) -> dict:
         if not friend_name:
@@ -676,15 +701,16 @@ class WemaiAdapterPlugin(MaiBotPlugin):
         return {"success": True, "message": f"已通知客户端批准 {friend_name} 的好友申请"}
 
     @Tool(
-        name="hub_dismiss_friend",
-        description="忽略/取消一个好友请求。不添加对方为好友，直接清除通知。确定无需添加时直接调用，无需询问管理员。参数: friend_name=对方昵称或验证消息中的名字。",
-        parameters={
-            "type": "object",
-            "properties": {
-                "friend_name": {"type": "string", "description": "要忽略的好友昵称或验证消息中的名字"},
-            },
-            "required": ["friend_name"],
-        },
+        "hub_dismiss_friend",
+        brief_description="忽略/取消一个好友请求。不添加对方为好友，直接清除通知。确定无需添加时直接调用，无需询问管理员。",
+        parameters=[
+            ToolParameterInfo(
+                name="friend_name",
+                param_type=ToolParamType.STRING,
+                description="要忽略的好友昵称或验证消息中的名字",
+                required=True,
+            ),
+        ],
     )
     async def tool_hub_dismiss_friend(self, friend_name: str = "", **kwargs: Any) -> dict:
         if not friend_name:
@@ -725,6 +751,7 @@ class WemaiAdapterPlugin(MaiBotPlugin):
                     gateway_name=WEMAI_GATEWAY_NAME,
                     ready=True,
                     platform="wechat",
+                    scope="primary",
                     metadata={"server": settings.ws_server.build_ws_url()},
                 )
                 if ok:
